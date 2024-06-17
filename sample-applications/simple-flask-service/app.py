@@ -13,13 +13,13 @@ session = sessions.Session()
 
 @app.route('/health-check')
 def call_health_check():
-    return 200
+    return "", 200
 
 
 @app.route('/dep')
 def call_dep():
     session.request("GET", "http://simple-service:8081/health-check")
-    return 200
+    return "", 200
 
 
 if __name__ == "__main__":
