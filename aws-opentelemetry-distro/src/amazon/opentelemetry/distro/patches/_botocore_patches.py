@@ -5,11 +5,16 @@ import importlib
 
 from amazon.opentelemetry.distro.patches._bedrock_patches import (  # noqa # pylint: disable=unused-import
     _BedrockRuntimeExtension,
+    _BedrockAgentExtension,
+    _BedrockAgentRuntimeExtension,
+    _BedrockExtension,
 )
 from opentelemetry.instrumentation.botocore.extensions import _KNOWN_EXTENSIONS
 from opentelemetry.instrumentation.botocore.extensions.sqs import _SqsExtension
-from opentelemetry.instrumentation.botocore.extensions.types import _AttributeMapT, _AwsSdkExtension
+from opentelemetry.instrumentation.botocore.extensions.types import _AttributeMapT, _AwsSdkExtension, _BotoResultT
 from opentelemetry.semconv.trace import SpanAttributes
+from opentelemetry.trace.span import Span
+from opentelemetry.instrumentation.botocore.extensions.lmbd import _LambdaExtension
 
 
 def _apply_botocore_instrumentation_patches() -> None:
@@ -21,6 +26,9 @@ def _apply_botocore_instrumentation_patches() -> None:
     _apply_botocore_s3_patch()
     _apply_botocore_sqs_patch()
     _apply_botocore_bedrock_patch()
+    _apply_botocore_secretsmanager_patch()
+    _apply_botocore_stepfunctions_patch()
+    _apply_botocore_lambda_patch()
 
 
 def _apply_botocore_kinesis_patch() -> None:
@@ -78,7 +86,50 @@ def _apply_botocore_bedrock_patch() -> None:
     the AWS_BEDROCK_RUNTIME_MODEL_ID attribute.
     """
     _KNOWN_EXTENSIONS["bedrock-runtime"] = _lazy_load(".", "_BedrockRuntimeExtension")
+    _KNOWN_EXTENSIONS["bedrock"] = _lazy_load(".", "_BedrockExtension")
+    _KNOWN_EXTENSIONS["bedrock-agent"] = _lazy_load(".", "_BedrockAgentExtension")
+    _KNOWN_EXTENSIONS["bedrock-agent-runtime"] = _lazy_load(".", "_BedrockAgentRuntimeExtension")
 
+def _apply_botocore_secretsmanager_patch() -> None:
+    """Botocore instrumentation patch for SecretsManager
+
+    This patch adds an extension to the upstream's list of known extension for SecretsManager.
+    Extensions allow for custom logic for adding service-specific information to spans,
+    such as attributes. Specifically, we are adding logic to add the AWS_SECRET_ARN attribute.
+    """
+    _KNOWN_EXTENSIONS["secretsmanager"] = _lazy_load(".", "_SecretsManagerExtension")
+
+
+def _apply_botocore_stepfunctions_patch() -> None:
+    """Botocore instrumentation patch for StepFunctions
+
+    This patch adds an extension to the upstream's list of known extension for StepFunctions.
+    Extensions allow for custom logic for adding service-specific information to spans,
+    such as attributes. Specifically, we are adding logic to add the AWS_STATE_MACHINE_ARN attribute.
+    """
+    _KNOWN_EXTENSIONS["stepfunctions"] = _lazy_load(".", "_StepFunctionsExtension")
+
+def _apply_botocore_lambda_patch() -> None:
+    """Botocore instrumentation patch for Lambda
+
+    This patch extends the existing upstream extension for Lambda. Extensions allow for custom logic for adding
+    service-specific information to spans, such as attributes. Specifically, we are adding logic to add
+    `aws.lambda.function_name` and `aws.lambda.resource_mapping_id` attributes.
+    Callout that today, the upstream logic adds `SpanAttributes.FAAS_INVOKED_NAME` for Invoke operation,
+    but we want to cover more operations to extract `FunctionName`, we define "aws.lambda.function_name" separately.
+    """
+    old_extract_attributes = _LambdaExtension.extract_attributes
+
+    def patch_extract_attributes(self, attributes: _AttributeMapT):
+        old_extract_attributes(self, attributes)
+        function_name = self._call_context.params.get("FunctionName")
+        resource_mapping_id = self._call_context.params.get("UUID")
+        if function_name:
+            attributes["aws.lambda.function_name"] = function_name
+        if resource_mapping_id:
+            attributes["aws.lambda.resource_mapping_id"] = resource_mapping_id
+
+    _LambdaExtension.extract_attributes = patch_extract_attributes
 
 # The OpenTelemetry Authors code
 def _lazy_load(module, cls):
@@ -109,3 +160,41 @@ class _KinesisExtension(_AwsSdkExtension):
         stream_name = self._call_context.params.get("StreamName")
         if stream_name:
             attributes["aws.kinesis.stream_name"] = stream_name
+        consumer_arn = self._call_context.params.get("ConsumerARN")
+        if consumer_arn:
+            attributes["aws.kinesis.stream_consumer_arn"] = consumer_arn
+
+class _SecretsManagerExtension(_AwsSdkExtension):
+    def extract_attributes(self, attributes: _AttributeMapT):
+        """
+        SecretId can be secret name or secret arn, the function extracts attributes only if the SecretId parameter
+        is provided as arn which starts with 'arn:aws:secretsmanager:'.
+        """
+        secret_id = self._call_context.params.get("SecretId")
+        if secret_id and secret_id.startswith("arn:aws:secretsmanager:"):
+            attributes["aws.secretsmanager.secret_arn"] = secret_id
+
+    # pylint: disable=no-self-use
+    def on_success(self, span: Span, result: _BotoResultT):
+        secret_arn = result.get("ARN")
+        if secret_arn:
+            span.set_attribute(
+                "aws.secretsmanager.secret_arn",
+                secret_arn,
+            )
+
+
+class _StepFunctionsExtension(_AwsSdkExtension):
+    def extract_attributes(self, attributes: _AttributeMapT):
+        state_machine_arn = self._call_context.params.get("stateMachineArn")
+        if state_machine_arn:
+            attributes["aws.stepfunctions.state_machine_arn"] = state_machine_arn
+
+    # pylint: disable=no-self-use
+    def on_success(self, span: Span, result: _BotoResultT):
+        state_machine_arn = result.get("stateMachineArn")
+        if state_machine_arn:
+            span.set_attribute(
+                "aws.stepfunctions.state_machine_arn",
+                state_machine_arn,
+            )

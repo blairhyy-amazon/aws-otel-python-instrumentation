@@ -6,6 +6,12 @@ from typing import Match, Optional
 from urllib.parse import ParseResult, urlparse
 
 from amazon.opentelemetry.distro._aws_attribute_keys import (
+    AWS_LAMBDA_FUNCTION_NAME,
+    AWS_LAMBDA_SOURCE_MAPPING_ID,
+    AWS_BEDROCK_AGENT_ID,
+    AWS_BEDROCK_DATASOURCE_ID,
+    AWS_BEDROCK_GUARDRAIL_ID,
+    AWS_BEDROCK_KNOWLEDGEBASE_ID,
     AWS_BEDROCK_RUNTIME_MODEL_ID,
     AWS_LOCAL_OPERATION,
     AWS_LOCAL_SERVICE,
@@ -17,6 +23,9 @@ from amazon.opentelemetry.distro._aws_attribute_keys import (
     AWS_REMOTE_SERVICE,
     AWS_SPAN_KIND,
     AWS_STREAM_NAME,
+    AWS_SECRET_ARN,
+    AWS_STATE_MACHINE_ARN,
+    AWS_STREAM_CONSUMER_ARN,
 )
 from amazon.opentelemetry.distro._aws_span_processing_util import (
     LOCAL_ROOT,
@@ -59,6 +68,7 @@ _GRAPHQL_OPERATION_TYPE: str = SpanAttributes.GRAPHQL_OPERATION_TYPE
 _HTTP_METHOD: str = SpanAttributes.HTTP_METHOD
 _HTTP_URL: str = SpanAttributes.HTTP_URL
 _MESSAGING_OPERATION: str = SpanAttributes.MESSAGING_OPERATION
+_MESSAGING_DESTINATION: str = SpanAttributes.MESSAGING_DESTINATION
 _MESSAGING_SYSTEM: str = SpanAttributes.MESSAGING_SYSTEM
 _NET_PEER_NAME: str = SpanAttributes.NET_PEER_NAME
 _NET_PEER_PORT: str = SpanAttributes.NET_PEER_PORT
@@ -79,7 +89,12 @@ _NORMALIZED_DYNAMO_DB_SERVICE_NAME: str = "AWS::DynamoDB"
 _NORMALIZED_KINESIS_SERVICE_NAME: str = "AWS::Kinesis"
 _NORMALIZED_S3_SERVICE_NAME: str = "AWS::S3"
 _NORMALIZED_SQS_SERVICE_NAME: str = "AWS::SQS"
+_NORMALIZED_BEDROCK_SERVICE_NAME: str = "AWS::Bedrock"
 _NORMALIZED_BEDROCK_RUNTIME_SERVICE_NAME: str = "AWS::BedrockRuntime"
+_NORMALIZED_SECRETSMANAGER_SERVICE_NAME: str = "AWS::SecretsManager"
+_NORMALIZED_STEPFUNCTIONS_SERVICE_NAME: str = "AWS::StepFunctions"
+_NORMALIZED_LAMBDA_SERVICE_NAME: str = "AWS::Lambda"
+_NORMALIZED_SNS_SERVICE_NAME: str = "AWS::SNS"
 _DB_CONNECTION_STRING_TYPE: str = "DB::Connection"
 
 # Special DEPENDENCY attribute value if GRAPHQL_OPERATION_TYPE attribute key is present.
@@ -293,10 +308,13 @@ def _normalize_remote_service_name(span: ReadableSpan, service_name: str) -> str
     """
     if is_aws_sdk_span(span):
         aws_sdk_service_mapping = {
+            "Bedrock Agent": _NORMALIZED_BEDROCK_SERVICE_NAME,
+            "Bedrock Agent Runtime": _NORMALIZED_BEDROCK_SERVICE_NAME,
             "Bedrock Runtime": _NORMALIZED_BEDROCK_RUNTIME_SERVICE_NAME,
+            "Secrets Manager": _NORMALIZED_SECRETSMANAGER_SERVICE_NAME,
+            "SFN": _NORMALIZED_STEPFUNCTIONS_SERVICE_NAME,
         }
-        return aws_sdk_service_mapping.get(service_name, "AWS::" + service_name)
-    return service_name
+    return aws_sdk_service_mapping.get(service_name, "AWS::" + service_name)
 
 
 def _generate_remote_service(span: ReadableSpan) -> str:
@@ -377,6 +395,36 @@ def _set_remote_type_and_identifier(span: ReadableSpan, attributes: BoundedAttri
             remote_resource_identifier = _escape_delimiters(
                 SqsUrlParser.get_queue_name(span.attributes.get(AWS_QUEUE_URL))
             )
+        elif is_key_present(span, _MESSAGING_DESTINATION):
+            remote_resource_type = _NORMALIZED_SNS_SERVICE_NAME + "::Topic"
+            remote_resource_identifier = _escape_delimiters(span.attributes.get(_MESSAGING_DESTINATION))
+        elif is_key_present(span, AWS_STREAM_CONSUMER_ARN):
+            remote_resource_type = _NORMALIZED_KINESIS_SERVICE_NAME + "::StreamConsumer"
+            remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_STREAM_CONSUMER_ARN))
+        elif is_key_present(span, AWS_LAMBDA_SOURCE_MAPPING_ID):
+            remote_resource_type = _NORMALIZED_LAMBDA_SERVICE_NAME + "::EventSourceMapping"
+            remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_LAMBDA_SOURCE_MAPPING_ID))
+        elif is_key_present(span, AWS_LAMBDA_FUNCTION_NAME):
+            remote_resource_type = _NORMALIZED_LAMBDA_SERVICE_NAME + "::Function"
+            remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_LAMBDA_FUNCTION_NAME))
+        elif is_key_present(span, AWS_SECRET_ARN):
+            remote_resource_type = _NORMALIZED_SECRETSMANAGER_SERVICE_NAME + "::Secret"
+            remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_SECRET_ARN))
+        elif is_key_present(span, AWS_STATE_MACHINE_ARN):
+            remote_resource_type = _NORMALIZED_STEPFUNCTIONS_SERVICE_NAME + "::StateMachine"
+            remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_STATE_MACHINE_ARN))
+        elif is_key_present(span, AWS_BEDROCK_AGENT_ID):
+            remote_resource_type = _NORMALIZED_BEDROCK_SERVICE_NAME + "::Agent"
+            remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_BEDROCK_AGENT_ID))
+        elif is_key_present(span, AWS_BEDROCK_DATASOURCE_ID):
+            remote_resource_type = _NORMALIZED_BEDROCK_SERVICE_NAME + "::DataSource"
+            remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_BEDROCK_DATASOURCE_ID))
+        elif is_key_present(span, AWS_BEDROCK_GUARDRAIL_ID):
+            remote_resource_type = _NORMALIZED_BEDROCK_SERVICE_NAME + "::Guardrail"
+            remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_BEDROCK_GUARDRAIL_ID))
+        elif is_key_present(span, AWS_BEDROCK_KNOWLEDGEBASE_ID):
+            remote_resource_type = _NORMALIZED_BEDROCK_SERVICE_NAME + "::KnowledgeBase"
+            remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_BEDROCK_KNOWLEDGEBASE_ID))
         elif is_key_present(span, AWS_BEDROCK_RUNTIME_MODEL_ID):
             remote_resource_type = _NORMALIZED_BEDROCK_RUNTIME_SERVICE_NAME + "::Model"
             remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_BEDROCK_RUNTIME_MODEL_ID))

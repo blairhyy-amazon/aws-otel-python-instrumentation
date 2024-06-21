@@ -4,7 +4,7 @@
 import abc
 import inspect
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from opentelemetry.instrumentation.botocore.extensions.types import (
     _AttributeMapT,
@@ -191,3 +191,135 @@ class _BedrockRuntimeExtension(_AwsSdkExtension):
             model = _MODEL_MAPPING.get(self._model_id.split("-")[0])
             if model and self._op == "InvokeModel":
                 model.on_success(span, result)
+
+class _BedrockAgentOperation(abc.ABC):
+    start_attributes: Optional[Dict[str, str]] = None
+    response_attributes: Optional[Dict[str, str]] = None
+
+    @classmethod
+    @abc.abstractmethod
+    def operation_names(cls):
+        pass
+
+
+class _AgentOperation(_BedrockAgentOperation):
+    start_attributes = {
+        "aws.bedrock.agent_id": "agentId",
+    }
+    response_attributes = {
+        "aws.bedrock.agent_id": "agentId",
+    }
+
+    @classmethod
+    def operation_names(cls):
+        return [
+            "CreateAgentActionGroup",
+            "CreateAgentAlias",
+            "DeleteAgentActionGroup",
+            "DeleteAgentAlias",
+            "DeleteAgent",
+            "DeleteAgentVersion",
+            "GetAgentActionGroup",
+            "GetAgentAlias",
+            "GetAgent",
+            "GetAgentVersion",
+            "ListAgentActionGroups",
+            "ListAgentAliases",
+            "ListAgentKnowledgeBases",
+            "ListAgentVersions",
+            "PrepareAgent",
+            "UpdateAgentActionGroup",
+            "UpdateAgentAlias",
+            "UpdateAgent",
+        ]
+
+
+class _KnowledgeBaseOperation(_BedrockAgentOperation):
+    start_attributes = {
+        "aws.bedrock.knowledgebase_id": "knowledgeBaseId",
+    }
+    response_attributes = {}
+
+    @classmethod
+    def operation_names(cls):
+        return [
+            "AssociateAgentKnowledgeBase",
+            "CreateDataSource",
+            "DeleteKnowledgeBase",
+            "DisassociateAgentKnowledgeBase",
+            "GetAgentKnowledgeBase",
+            "GetKnowledgeBase",
+            "ListDataSources",
+            "UpdateAgentKnowledgeBase",
+        ]
+
+
+class _DataSourceOperation(_BedrockAgentOperation):
+    start_attributes = {
+        "aws.bedrock.datasource_id": "dataSourceId",
+    }
+    response_attributes = {
+        "aws.bedrock.datasource_id": "dataSourceId",
+    }
+
+    @classmethod
+    def operation_names(cls):
+        return ["DeleteDataSource", "GetDataSource", "UpdateDataSource"]
+
+
+_OPERATION_MAPPING = {
+    op_name: op_class
+    for op_class in [_KnowledgeBaseOperation, _DataSourceOperation, _AgentOperation]
+    for op_name in op_class.operation_names()
+    if inspect.isclass(op_class) and issubclass(op_class, _BedrockAgentOperation) and not inspect.isabstract(op_class)
+}
+
+
+class _BedrockAgentExtension(_AwsSdkExtension):
+    def __init__(self, call_context: _AwsSdkCallContext):
+        super().__init__(call_context)
+        self._op = _OPERATION_MAPPING.get(call_context.operation)
+
+    def extract_attributes(self, attributes: _AttributeMapT):
+        if self._op is None:
+            return
+        for key, value in self._op.start_attributes.items():
+            extracted_value = self._call_context.params.get(value)
+            if extracted_value:
+                attributes[key] = extracted_value
+
+    def on_success(self, span: Span, result: _BotoResultT):
+        if self._op is None:
+            return
+
+        for key, value in self._op.response_attributes.items():
+            response_value = result.get(value)
+            if response_value:
+                span.set_attribute(
+                    key,
+                    response_value,
+                )
+
+
+class _BedrockAgentRuntimeExtension(_AwsSdkExtension):
+    def extract_attributes(self, attributes: _AttributeMapT):
+        agent_id = self._call_context.params.get("agentId")
+        if agent_id:
+            attributes["aws.bedrock.agent_id"] = agent_id
+
+        knowledgebase_id = self._call_context.params.get("knowledgeBaseId")
+        if knowledgebase_id:
+            attributes["aws.bedrock.knowledgebase_id"] = knowledgebase_id
+
+
+class _BedrockExtension(_AwsSdkExtension):
+    # pylint: disable=no-self-use
+    def on_success(self, span: Span, result: _BotoResultT):
+        # GuardrailId
+        guardrail_id = result.get("guardrailId")
+        if guardrail_id:
+            span.set_attribute(
+                "aws.bedrock.guardrail_id",
+                guardrail_id,
+            )
+
