@@ -139,6 +139,8 @@ def is_local_root(span: ReadableSpan) -> bool:
     """
     return span.parent is None or not span.parent.is_valid or span.parent.is_remote
 
+def is_valid_account_id(account_id: str) -> bool:
+    return account_id.isdigit()
 
 def _is_boto3sqs_span(span: ReadableSpan) -> bool:
     """

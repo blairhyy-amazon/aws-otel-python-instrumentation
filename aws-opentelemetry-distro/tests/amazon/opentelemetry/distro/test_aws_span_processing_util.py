@@ -17,6 +17,7 @@ from amazon.opentelemetry.distro._aws_span_processing_util import (
     is_consumer_process_span,
     is_key_present,
     is_local_root,
+    is_valid_account_id,
     should_generate_dependency_metric_attributes,
     should_generate_service_metric_attributes,
     should_use_internal_operation,
@@ -381,3 +382,7 @@ class TestAwsSpanProcessingUtil(TestCase):
         keywords: List[str] = _get_dialect_keywords()
         for keyword in keywords:
             self.assertLessEqual(len(keyword), MAX_KEYWORD_LENGTH)
+
+    def test_is_valid_account_id(self):
+        self.assertTrue(is_valid_account_id("123456789012"))
+        self.assertFalse(is_valid_account_id("invalidAccount1234"))

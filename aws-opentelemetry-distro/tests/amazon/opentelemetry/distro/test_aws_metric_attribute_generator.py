@@ -9,12 +9,18 @@ from unittest import TestCase
 from unittest.mock import MagicMock
 
 from amazon.opentelemetry.distro._aws_attribute_keys import (
+    AWS_AUTH_ACCESS_KEY,
+    AWS_AUTH_ACCOUNT_ID,
+    AWS_AUTH_REGION,
     AWS_BEDROCK_AGENT_ID,
     AWS_BEDROCK_DATA_SOURCE_ID,
+    AWS_BEDROCK_GUARDRAIL_ARN,
     AWS_BEDROCK_GUARDRAIL_ID,
     AWS_BEDROCK_KNOWLEDGE_BASE_ID,
     AWS_CLOUDFORMATION_PRIMARY_IDENTIFIER,
     AWS_CONSUMER_PARENT_SPAN_KIND,
+    AWS_DYNAMODB_TABLE_ARN,
+    AWS_KINESIS_STREAM_ARN,
     AWS_KINESIS_STREAM_NAME,
     AWS_LAMBDA_FUNCTION_ARN,
     AWS_LAMBDA_FUNCTION_NAME,
@@ -58,6 +64,8 @@ _UNKNOWN_SERVICE: str = "UnknownService"
 _UNKNOWN_OPERATION: str = "UnknownOperation"
 _UNKNOWN_REMOTE_SERVICE: str = "UnknownRemoteService"
 _UNKNOWN_REMOTE_OPERATION: str = "UnknownRemoteOperation"
+_MOCK_ACCOUNT_ID: str = "123456789012"
+_MOCK_REGION: str = "us-east-1"
 
 _INTERNAL_OPERATION: str = "InternalOperation"
 _LOCAL_ROOT: str = "LOCAL_ROOT"
@@ -1211,6 +1219,141 @@ class TestAwsMetricAttributeGenerator(TestCase):
 
         self._mock_attribute([SpanAttributes.RPC_SYSTEM], [None])
 
+    def test_sdk_client_span_with_auth_account_id_and_region_from_resource_arn(self):
+        keys: List[str] = [
+            SpanAttributes.DB_SYSTEM,
+        ]
+        values: List[str] = [
+            "mysql",
+        ]
+        self._mock_attribute(keys, values)
+        # DynamoDB Table ARN
+        self._mock_attribute(
+            [AWS_DYNAMODB_TABLE_ARN],
+            [self._create_mock_arn(service="dynamodb", resource_id="my-table", resource_type="table")],
+            keys,
+            values,
+        )
+        self._validate_auth_account_id_and_region(_MOCK_ACCOUNT_ID, _MOCK_REGION)
+        self._mock_attribute([AWS_DYNAMODB_TABLE_ARN], [None])
+
+        # Kinesis Stream ARN
+        self._mock_attribute(
+            [AWS_KINESIS_STREAM_ARN],
+            [self._create_mock_arn(service="kinesis", resource_id="my-stream", resource_type="stream")],
+            keys,
+            values,
+        )
+        self._validate_auth_account_id_and_region(_MOCK_ACCOUNT_ID, _MOCK_REGION)
+        self._mock_attribute([AWS_KINESIS_STREAM_ARN], [None])
+
+        # SNS Topic ARN
+        self._mock_attribute(
+            [AWS_SNS_TOPIC_ARN],
+            [self._create_mock_arn(service="sns", resource_id="my-topic", resource_type="")],
+            keys,
+            values,
+        )
+        self._validate_auth_account_id_and_region(_MOCK_ACCOUNT_ID, _MOCK_REGION)
+        self._mock_attribute([AWS_SNS_TOPIC_ARN], [None])
+
+        # SecretsManager Secret ARN
+        self._mock_attribute(
+            [AWS_SECRETSMANAGER_SECRET_ARN],
+            [self._create_mock_arn(service="secretsmanager", resource_id="my-secret", resource_type="secret")],
+            keys,
+            values,
+        )
+        self._validate_auth_account_id_and_region(_MOCK_ACCOUNT_ID, _MOCK_REGION)
+        self._mock_attribute([AWS_SECRETSMANAGER_SECRET_ARN], [None])
+
+        # Step Functions State Machine ARN
+        self._mock_attribute(
+            [AWS_STEPFUNCTIONS_STATEMACHINE_ARN],
+            [self._create_mock_arn(service="states", resource_id="my-state-machine", resource_type="stateMachine")],
+            keys,
+            values,
+        )
+        self._validate_auth_account_id_and_region(_MOCK_ACCOUNT_ID, _MOCK_REGION)
+        self._mock_attribute([AWS_STEPFUNCTIONS_STATEMACHINE_ARN], [None])
+
+        # Step Functions Activity ARN
+        self._mock_attribute(
+            [AWS_STEPFUNCTIONS_ACTIVITY_ARN],
+            [self._create_mock_arn(service="states", resource_id="my-activity", resource_type="activity")],
+            keys,
+            values,
+        )
+        self._validate_auth_account_id_and_region(_MOCK_ACCOUNT_ID, _MOCK_REGION)
+        self._mock_attribute([AWS_STEPFUNCTIONS_ACTIVITY_ARN], [None])
+
+        # Bedrock Guardrail ARN
+        self._mock_attribute(
+            [AWS_BEDROCK_GUARDRAIL_ARN],
+            [self._create_mock_arn(service="bedrock", resource_id="my-guardrail", resource_type="guardrail")],
+            keys,
+            values,
+        )
+        self._validate_auth_account_id_and_region(_MOCK_ACCOUNT_ID, _MOCK_REGION)
+        self._mock_attribute([AWS_BEDROCK_GUARDRAIL_ARN], [None])
+
+        # Lambda Function ARN
+        self._mock_attribute(
+            [AWS_LAMBDA_FUNCTION_ARN],
+            [self._create_mock_arn(service="lambda", resource_id="my-function", resource_type="function")],
+            keys,
+            values,
+        )
+        self._validate_auth_account_id_and_region(_MOCK_ACCOUNT_ID, _MOCK_REGION)
+        self._mock_attribute([AWS_LAMBDA_FUNCTION_ARN], [None])
+
+    def test_sdk_client_span_with_auth_access_key_and_region_from_sts(self):
+        keys: List[str] = [
+            SpanAttributes.DB_SYSTEM,
+        ]
+        values: List[str] = [
+            "mysql",
+        ]
+        self._mock_attribute(keys, values)
+
+        mock_access_key = "accesskey"
+        self._mock_attribute([AWS_AUTH_ACCESS_KEY, AWS_AUTH_REGION], [mock_access_key, _MOCK_REGION], keys, values)
+        self.span_mock.kind = SpanKind.CLIENT
+        actual_attributes = _GENERATOR.generate_metric_attributes_dict_from_span(self.span_mock, self.resource).get(
+            DEPENDENCY_METRIC
+        )
+        self.assertEqual(mock_access_key, actual_attributes.get(AWS_AUTH_ACCESS_KEY))
+        self.assertEqual(_MOCK_REGION, actual_attributes.get(AWS_AUTH_REGION))
+        self.assertIsNone(actual_attributes.get(AWS_AUTH_ACCOUNT_ID))
+
+    def test_sdk_client_span_with_auth_account_id_and_region_from_resource_arn_and_sts(self):
+        keys: List[str] = [
+            SpanAttributes.DB_SYSTEM,
+        ]
+        values: List[str] = [
+            "mysql",
+        ]
+        self._mock_attribute(keys, values)
+
+        mock_access_key = "accesskey"
+        self._mock_attribute(
+            [AWS_AUTH_ACCESS_KEY, AWS_AUTH_REGION, AWS_LAMBDA_FUNCTION_ARN],
+            [
+                mock_access_key,
+                _MOCK_REGION,
+                self._create_mock_arn(service="lambda", resource_id="my-function", resource_type="function"),
+            ],
+            keys,
+            values,
+        )
+        self.span_mock.kind = SpanKind.CLIENT
+        actual_attributes = _GENERATOR.generate_metric_attributes_dict_from_span(self.span_mock, self.resource).get(
+            DEPENDENCY_METRIC
+        )
+        self.assertEqual(_MOCK_ACCOUNT_ID, actual_attributes.get(AWS_AUTH_ACCOUNT_ID))
+        self.assertEqual(_MOCK_REGION, actual_attributes.get(AWS_AUTH_REGION))
+        self.assertIsNone(actual_attributes.get(AWS_AUTH_ACCESS_KEY))
+
     def test_client_db_span_with_remote_resource_attributes(self):
         keys: List[str] = [
             SpanAttributes.DB_SYSTEM,
@@ -1487,6 +1630,14 @@ class TestAwsMetricAttributeGenerator(TestCase):
             [None],
         )
 
+    def _validate_auth_account_id_and_region(self, expected_account_id: str, expected_region: str):
+        self.span_mock.kind = SpanKind.CLIENT
+        actual_attributes = _GENERATOR.generate_metric_attributes_dict_from_span(self.span_mock, self.resource).get(
+            DEPENDENCY_METRIC
+        )
+        self.assertEqual(expected_account_id, actual_attributes.get(AWS_AUTH_ACCOUNT_ID))
+        self.assertEqual(expected_region, actual_attributes.get(AWS_AUTH_REGION))
+
     def _validate_remote_resource_attributes(self, expected_type: str, expected_identifier: str) -> None:
         # Client, Producer, and Consumer spans should generate the expected remote resource attribute
         self.span_mock.kind = SpanKind.CLIENT
@@ -1539,3 +1690,14 @@ class TestAwsMetricAttributeGenerator(TestCase):
                 self.assertIsNone(dependency_attributes)
                 self.assertEqual(len(service_attributes), len(BoundedAttributes(attributes=expected_attributes)))
                 self.assertEqual(service_attributes, BoundedAttributes(attributes=expected_attributes))
+
+    def _create_mock_arn(
+        self,
+        service: str,
+        resource_type: str,
+        resource_id: str = "default",
+        region: str = _MOCK_REGION,
+        account_id: str = _MOCK_ACCOUNT_ID,
+    ) -> str:
+        resource = f"{resource_type}/{resource_id}"
+        return f"arn:aws:{service}:{region}:{account_id}:{resource}"

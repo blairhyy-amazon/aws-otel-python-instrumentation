@@ -2,17 +2,22 @@
 # SPDX-License-Identifier: Apache-2.0
 import os
 import re
-from logging import DEBUG, Logger, getLogger
+from logging import DEBUG, INFO, Logger, getLogger
 from typing import Match, Optional
 from urllib.parse import ParseResult, urlparse
 
 from amazon.opentelemetry.distro._aws_attribute_keys import (
+    AWS_AUTH_ACCESS_KEY,
+    AWS_AUTH_ACCOUNT_ID,
+    AWS_AUTH_REGION,
     AWS_BEDROCK_AGENT_ID,
     AWS_BEDROCK_DATA_SOURCE_ID,
     AWS_BEDROCK_GUARDRAIL_ARN,
     AWS_BEDROCK_GUARDRAIL_ID,
     AWS_BEDROCK_KNOWLEDGE_BASE_ID,
     AWS_CLOUDFORMATION_PRIMARY_IDENTIFIER,
+    AWS_DYNAMODB_TABLE_ARN,
+    AWS_KINESIS_STREAM_ARN,
     AWS_KINESIS_STREAM_NAME,
     AWS_LAMBDA_FUNCTION_ARN,
     AWS_LAMBDA_FUNCTION_NAME,
@@ -49,6 +54,7 @@ from amazon.opentelemetry.distro._aws_span_processing_util import (
     is_db_span,
     is_key_present,
     is_local_root,
+    is_valid_account_id,
     should_generate_dependency_metric_attributes,
     should_generate_service_metric_attributes,
 )
@@ -145,6 +151,9 @@ def _generate_dependency_metric_attributes(span: ReadableSpan, resource: Resourc
     _set_egress_operation(span, attributes)
     _set_remote_service_and_operation(span, attributes)
     _set_remote_type_and_identifier(span, attributes)
+    isAccountIdAndRegionPresent = _set_remote_account_id_and_region(span, attributes)
+    if not isAccountIdAndRegionPresent:
+        _set_remote_access_key_and_region(span, attributes)
     _set_remote_db_user(span, attributes)
     _set_span_kind_for_dependency(span, attributes)
     return attributes
@@ -489,6 +498,67 @@ def _set_remote_type_and_identifier(span: ReadableSpan, attributes: BoundedAttri
         attributes[AWS_REMOTE_RESOURCE_TYPE] = remote_resource_type
         attributes[AWS_REMOTE_RESOURCE_IDENTIFIER] = remote_resource_identifier
         attributes[AWS_CLOUDFORMATION_PRIMARY_IDENTIFIER] = cloudformation_primary_identifier
+
+
+def _set_remote_account_id_and_region(span: ReadableSpan, attributes: BoundedAttributes) -> bool:
+    ARN_ATTRIBUTES = [
+        AWS_DYNAMODB_TABLE_ARN,
+        AWS_KINESIS_STREAM_ARN,
+        AWS_SNS_TOPIC_ARN,
+        AWS_SNS_TOPIC_ARN,
+        AWS_SECRETSMANAGER_SECRET_ARN,
+        AWS_STEPFUNCTIONS_STATEMACHINE_ARN,
+        AWS_STEPFUNCTIONS_ACTIVITY_ARN,
+        AWS_BEDROCK_GUARDRAIL_ARN,
+        AWS_LAMBDA_FUNCTION_ARN,
+    ]
+    remote_account_id: Optional[str] = None
+    remote_region: Optional[str] = None
+
+    if is_key_present(span, AWS_SQS_QUEUE_URL):
+        queue_url = span.attributes.get(AWS_SQS_QUEUE_URL)
+        parsed_url = urlparse(queue_url)
+        path_parts = parsed_url.path.strip("/").split("/")
+        hostname = parsed_url.netloc
+
+        if len(path_parts) != 3:
+            _log_unknown_attribute("account_id", span)
+            return False
+
+        remote_account_id = path_parts[0]
+
+        if hostname.startswith("sqs.") and ".amazonaws.com" in hostname:
+            remote_region = hostname.replace("sqs.", "").split(".amazonaws.com")[0]
+        else:
+            _log_unknown_attribute("region", span)
+            return False
+    else:
+        for arn_attribute in ARN_ATTRIBUTES:
+            if is_key_present(span, arn_attribute):
+                arn = span.attributes.get(arn_attribute)
+                arn_parts = arn.split(":")
+                if len(arn_parts) != 6:
+                    _log_unknown_attribute("account_id and region", span)
+                    continue
+                remote_account_id = arn_parts[4]
+                remote_region = arn_parts[3]
+                break
+
+    if remote_account_id is not None and remote_region is not None:
+        if not is_valid_account_id(remote_account_id):
+            _logger.log(DEBUG, "Invalid account id: %s", remote_account_id)
+            return False
+        attributes[AWS_AUTH_ACCOUNT_ID] = remote_account_id
+        attributes[AWS_AUTH_REGION] = remote_region
+        return True
+    return False
+
+
+def _set_remote_access_key_and_region(span: ReadableSpan, attributes: BoundedAttributes) -> None:
+    if is_key_present(span, AWS_AUTH_ACCESS_KEY):
+        attributes[AWS_AUTH_ACCESS_KEY] = span.attributes.get(AWS_AUTH_ACCESS_KEY)
+    if is_key_present(span, AWS_AUTH_REGION):
+        attributes[AWS_AUTH_REGION] = span.attributes.get(AWS_AUTH_REGION)
 
 
 def _get_db_connection(span: ReadableSpan) -> None:
