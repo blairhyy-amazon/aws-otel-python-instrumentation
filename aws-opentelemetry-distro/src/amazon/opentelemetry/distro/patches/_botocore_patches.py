@@ -6,14 +6,14 @@ import importlib
 from botocore.exceptions import ClientError
 
 from amazon.opentelemetry.distro._aws_attribute_keys import (
+    AWS_AUTH_ACCESS_KEY,
+    AWS_AUTH_REGION,
     AWS_DYNAMODB_TABLE_ARN,
     AWS_KINESIS_STREAM_ARN,
     AWS_KINESIS_STREAM_NAME,
     AWS_LAMBDA_FUNCTION_ARN,
     AWS_LAMBDA_FUNCTION_NAME,
     AWS_LAMBDA_RESOURCEMAPPING_ID,
-    AWS_AUTH_ACCESS_KEY,
-    AWS_AUTH_REGION,
     AWS_SECRETSMANAGER_SECRET_ARN,
     AWS_SNS_TOPIC_ARN,
     AWS_SQS_QUEUE_NAME,
@@ -27,7 +27,12 @@ from amazon.opentelemetry.distro.patches._bedrock_patches import (  # noqa # pyl
     _BedrockExtension,
     _BedrockRuntimeExtension,
 )
-from opentelemetry.instrumentation.botocore import BotocoreInstrumentor, _safe_invoke, _determine_call_context, _apply_response_attributes
+from opentelemetry.instrumentation.botocore import (
+    BotocoreInstrumentor,
+    _apply_response_attributes,
+    _determine_call_context,
+    _safe_invoke,
+)
 from opentelemetry.instrumentation.botocore.extensions import _KNOWN_EXTENSIONS, _find_extension
 from opentelemetry.instrumentation.botocore.extensions.dynamodb import _DynamoDbExtension
 from opentelemetry.instrumentation.botocore.extensions.lmbd import _LambdaExtension
@@ -47,7 +52,7 @@ def _apply_botocore_instrumentation_patches() -> None:
 
     Adds patches to provide additional support and Java parity for Kinesis, S3, and SQS.
     """
-    _apply_botocore_credential_patch()
+    _apply_botocore_api_call_patch()
     _apply_botocore_kinesis_patch()
     _apply_botocore_s3_patch()
     _apply_botocore_sqs_patch()
@@ -217,6 +222,7 @@ def _apply_botocore_bedrock_patch() -> None:
     _KNOWN_EXTENSIONS["bedrock-agent-runtime"] = _lazy_load(".", "_BedrockAgentRuntimeExtension")
     _KNOWN_EXTENSIONS["bedrock-runtime"] = _lazy_load(".", "_BedrockRuntimeExtension")
 
+
 def _apply_botocore_dynamodb_patch() -> None:
     """Botocore instrumentation patch for DynamoDB
 
@@ -237,9 +243,8 @@ def _apply_botocore_dynamodb_patch() -> None:
 
     _DynamoDbExtension.on_success = patch_on_success
 
-def _apply_botocore_credential_patch() -> None:
-    # original_patched_api_call = BotocoreInstrumentor._patched_api_call 
-    
+
+def _apply_botocore_api_call_patch() -> None:
     def patched_api_call(self, original_func, instance, args, kwargs):
         if not is_instrumentation_enabled():
             return original_func(*args, **kwargs)
@@ -261,14 +266,11 @@ def _apply_botocore_credential_patch() -> None:
             AWS_AUTH_REGION: call_context.region,
         }
 
-        try: 
-            credentials = instance._get_credentials()
-            if credentials is not None:
-                access_key = credentials.access_key
-                if access_key is not None:
-                    attributes[AWS_AUTH_ACCESS_KEY] = access_key.access_key 
-        except Exception:
-            pass
+        credentials = instance._get_credentials()
+        if credentials is not None:
+            access_key = credentials.access_key
+            if access_key is not None:
+                attributes[AWS_AUTH_ACCESS_KEY] = access_key.access_key
 
         _safe_invoke(extension.extract_attributes, attributes)
 
@@ -299,6 +301,7 @@ def _apply_botocore_credential_patch() -> None:
             return result
 
     BotocoreInstrumentor._patched_api_call = patched_api_call
+
 
 # The OpenTelemetry Authors code
 def _lazy_load(module, cls):

@@ -1236,7 +1236,6 @@ class TestAwsMetricAttributeGenerator(TestCase):
         )
         self._validate_auth_account_id_and_region(_MOCK_ACCOUNT_ID, _MOCK_REGION)
         self._mock_attribute([AWS_DYNAMODB_TABLE_ARN], [None])
-        
 
         # Kinesis Stream ARN
         self._mock_attribute(
@@ -1298,7 +1297,6 @@ class TestAwsMetricAttributeGenerator(TestCase):
         self._validate_auth_account_id_and_region(_MOCK_ACCOUNT_ID, _MOCK_REGION)
         self._mock_attribute([AWS_BEDROCK_GUARDRAIL_ARN], [None])
 
-
         # Lambda Function ARN
         self._mock_attribute(
             [AWS_LAMBDA_FUNCTION_ARN],
@@ -1319,7 +1317,7 @@ class TestAwsMetricAttributeGenerator(TestCase):
         self._mock_attribute(keys, values)
 
         mock_access_key = "accesskey"
-        self._mock_attribute([AWS_AUTH_ACCESS_KEY, AWS_AUTH_REGION],[mock_access_key, _MOCK_REGION], keys, values)
+        self._mock_attribute([AWS_AUTH_ACCESS_KEY, AWS_AUTH_REGION], [mock_access_key, _MOCK_REGION], keys, values)
         self.span_mock.kind = SpanKind.CLIENT
         actual_attributes = _GENERATOR.generate_metric_attributes_dict_from_span(self.span_mock, self.resource).get(
             DEPENDENCY_METRIC
@@ -1340,9 +1338,14 @@ class TestAwsMetricAttributeGenerator(TestCase):
         mock_access_key = "accesskey"
         self._mock_attribute(
             [AWS_AUTH_ACCESS_KEY, AWS_AUTH_REGION, AWS_LAMBDA_FUNCTION_ARN],
-            [mock_access_key, _MOCK_REGION, self._create_mock_arn(service="lambda", resource_id="my-function", resource_type="function")], 
-            keys, 
-            values)
+            [
+                mock_access_key,
+                _MOCK_REGION,
+                self._create_mock_arn(service="lambda", resource_id="my-function", resource_type="function"),
+            ],
+            keys,
+            values,
+        )
         self.span_mock.kind = SpanKind.CLIENT
         actual_attributes = _GENERATOR.generate_metric_attributes_dict_from_span(self.span_mock, self.resource).get(
             DEPENDENCY_METRIC
@@ -1688,6 +1691,13 @@ class TestAwsMetricAttributeGenerator(TestCase):
                 self.assertEqual(len(service_attributes), len(BoundedAttributes(attributes=expected_attributes)))
                 self.assertEqual(service_attributes, BoundedAttributes(attributes=expected_attributes))
 
-    def _create_mock_arn(self, service: str, resource_type: str, resource_id: str = "default", region: str = _MOCK_REGION, account_id: str = _MOCK_ACCOUNT_ID) -> str:
+    def _create_mock_arn(
+        self,
+        service: str,
+        resource_type: str,
+        resource_id: str = "default",
+        region: str = _MOCK_REGION,
+        account_id: str = _MOCK_ACCOUNT_ID,
+    ) -> str:
         resource = f"{resource_type}/{resource_id}"
         return f"arn:aws:{service}:{region}:{account_id}:{resource}"

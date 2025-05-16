@@ -20,6 +20,7 @@ from opentelemetry.instrumentation.botocore.extensions import _KNOWN_EXTENSIONS
 from opentelemetry.semconv.trace import SpanAttributes
 from opentelemetry.trace.span import Span
 
+_STREAM_ARN: str = "arn:aws:kinesis:us-west-2:000000000000:stream/streamName"
 _STREAM_NAME: str = "streamName"
 _BUCKET_NAME: str = "bucketName"
 _QUEUE_NAME: str = "queueName"
@@ -161,6 +162,9 @@ class TestInstrumentationPatch(TestCase):
         # Lambda
         self.assertTrue("lambda" in _KNOWN_EXTENSIONS, "Upstream has removed the Lambda extension")
 
+        # DynamoDB
+        self.assertFalse("dynamodb" in _KNOWN_EXTENSIONS, "Upstream has added a DynamoDB extension")
+
     def _test_unpatched_gevent_instrumentation(self):
         self.assertFalse(gevent.monkey.is_module_patched("os"), "gevent os module has been patched")
         self.assertFalse(gevent.monkey.is_module_patched("thread"), "gevent thread module has been patched")
@@ -182,6 +186,8 @@ class TestInstrumentationPatch(TestCase):
         kinesis_attributes: Dict[str, str] = _do_extract_kinesis_attributes()
         self.assertTrue("aws.kinesis.stream.name" in kinesis_attributes)
         self.assertEqual(kinesis_attributes["aws.kinesis.stream.name"], _STREAM_NAME)
+        self.assertTrue("aws.kinesis.stream.arn" in kinesis_attributes)
+        self.assertEqual(kinesis_attributes["aws.kinesis.stream.arn"], _STREAM_ARN)
 
         # S3
         self.assertTrue("s3" in _KNOWN_EXTENSIONS)
@@ -593,7 +599,7 @@ class TestInstrumentationPatch(TestCase):
 
 def _do_extract_kinesis_attributes() -> Dict[str, str]:
     service_name: str = "kinesis"
-    params: Dict[str, str] = {"StreamName": _STREAM_NAME}
+    params: Dict[str, str] = {"StreamName": _STREAM_NAME, "StreamARN": _STREAM_ARN}
     return _do_extract_attributes(service_name, params)
 
 
