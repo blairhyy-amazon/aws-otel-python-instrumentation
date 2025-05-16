@@ -207,3 +207,6 @@ def _generate_ingress_operation(span: ReadableSpan) -> str:
                 operation = http_method + " " + operation
 
     return operation
+
+def _is_valid_account_id(account_id: str) -> bool:
+    return account_id.isdigit()

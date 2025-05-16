@@ -18,8 +18,12 @@ AWS_CLOUDFORMATION_PRIMARY_IDENTIFIER: str = "aws.remote.resource.cfn.primary.id
 
 # AWS_#_NAME attributes are not supported in python as they are not part of the Semantic Conventions.
 # TODO：Move to Semantic Conventions when these attributes are added.
+AWS_AUTH_ACCESS_KEY: str = "aws.auth.account.access_key"
+AWS_AUTH_ACCOUNT_ID: str = "aws.auth.account.id"
+AWS_AUTH_REGION: str = "aws.auth.region"
 AWS_SQS_QUEUE_URL: str = "aws.sqs.queue.url"
 AWS_SQS_QUEUE_NAME: str = "aws.sqs.queue.name"
+AWS_KINESIS_STREAM_ARN: str = "aws.kinesis.stream.arn"
 AWS_KINESIS_STREAM_NAME: str = "aws.kinesis.stream.name"
 AWS_BEDROCK_DATA_SOURCE_ID: str = "aws.bedrock.data_source.id"
 AWS_BEDROCK_KNOWLEDGE_BASE_ID: str = "aws.bedrock.knowledge_base.id"
@@ -33,3 +37,4 @@ AWS_STEPFUNCTIONS_ACTIVITY_ARN: str = "aws.stepfunctions.activity.arn"
 AWS_LAMBDA_FUNCTION_NAME: str = "aws.lambda.function.name"
 AWS_LAMBDA_RESOURCEMAPPING_ID: str = "aws.lambda.resource_mapping.id"
 AWS_LAMBDA_FUNCTION_ARN: str = "aws.lambda.function.arn"
+AWS_DYNAMODB_TABLE_ARN: str = "aws.dynamodb.table.arn"
