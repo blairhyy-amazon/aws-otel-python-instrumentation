@@ -10,12 +10,14 @@ from unittest.mock import MagicMock, patch
 
 import gevent.monkey
 import pkg_resources
+from botocore.client import BaseClient
 from botocore.response import StreamingBody
 
 from amazon.opentelemetry.distro.patches._instrumentation_patch import (
     AWS_GEVENT_PATCH_MODULES,
     apply_instrumentation_patches,
 )
+from opentelemetry.instrumentation.botocore import BotocoreInstrumentor
 from opentelemetry.instrumentation.botocore.extensions import _KNOWN_EXTENSIONS
 from opentelemetry.semconv.trace import SpanAttributes
 from opentelemetry.trace.span import Span
@@ -37,6 +39,7 @@ _STATE_MACHINE_ARN: str = "arn:aws:states:us-west-2:000000000000:stateMachine:te
 _ACTIVITY_ARN: str = "arn:aws:states:us-east-1:007003123456789012:activity:testActivity"
 _LAMBDA_FUNCTION_NAME: str = "lambdaFunctionName"
 _LAMBDA_SOURCE_MAPPING_ID: str = "lambdaEventSourceMappingID"
+_AUTH_ACCESS_KEY: str = "test-access-key"
 
 # Patch names
 GET_DISTRIBUTION_PATCH: str = "amazon.opentelemetry.distro._utils.pkg_resources.get_distribution"
@@ -163,7 +166,7 @@ class TestInstrumentationPatch(TestCase):
         self.assertTrue("lambda" in _KNOWN_EXTENSIONS, "Upstream has removed the Lambda extension")
 
         # DynamoDB
-        self.assertFalse("dynamodb" in _KNOWN_EXTENSIONS, "Upstream has added a DynamoDB extension")
+        self.assertTrue("dynamodb" in _KNOWN_EXTENSIONS, "Upstream has removed a DynamoDB extension")
 
     def _test_unpatched_gevent_instrumentation(self):
         self.assertFalse(gevent.monkey.is_module_patched("os"), "gevent os module has been patched")
@@ -338,6 +341,155 @@ class TestInstrumentationPatch(TestCase):
         self.assertEqual(lambda_attributes["aws.lambda.function.name"], _LAMBDA_FUNCTION_NAME)
         self.assertTrue("aws.lambda.resource_mapping.id" in lambda_attributes)
         self.assertEqual(lambda_attributes["aws.lambda.resource_mapping.id"], _LAMBDA_SOURCE_MAPPING_ID)
+        
+        # Access key
+        self._test_patched_api_call_with_credentials()
+        self._test_patched_api_call_with_no_credentials()
+        self._test_patched_api_call_with_no_access_key()
+
+    def _test_patched_api_call_with_credentials(self):  
+        # Create mocks
+        original_func: MagicMock = MagicMock(return_value={"result": "success"})
+        instance: MagicMock = MagicMock()
+        span: MagicMock = MagicMock()
+        args = ("operation_name",)
+        kwargs = {}
+        initial_attributes = {}
+          
+        # Mock credentials
+        mock_credentials = MagicMock()
+        mock_credentials.access_key = "test-access-key"
+        instance._get_credentials.return_value = mock_credentials
+        
+        # Mock call context
+        mock_call_context = MagicMock()
+        mock_call_context.service_id = "test-service"
+        mock_call_context.operation = "test-operation"
+        mock_call_context.region = "us-west-2"
+        mock_call_context.span_name = "test-span"
+        mock_call_context.span_kind = "CLIENT"
+        
+        # Mock extension
+        mock_extension = MagicMock()
+        mock_extension.should_trace_service_call.return_value = True
+        
+        # Mock tracer with a custom start_as_current_span that captures initial attributes
+        mock_tracer = MagicMock()
+        def mock_start_span(name, kind, attributes):
+            # Capture the initial attributes
+            initial_attributes.update(attributes)
+            cm = MagicMock()
+            cm.__enter__ = MagicMock(return_value=span)
+            cm.__exit__ = MagicMock(return_value=None)
+            return cm
+        mock_tracer.start_as_current_span.side_effect = mock_start_span
+        
+        with patch('opentelemetry.instrumentation.botocore._determine_call_context', return_value=mock_call_context):
+            with patch('opentelemetry.instrumentation.botocore._find_extension', return_value=mock_extension):
+                with patch('opentelemetry.instrumentation.botocore.is_instrumentation_enabled', return_value=True):
+                    BotocoreInstrumentor._tracer = mock_tracer
+                    
+                    instrumentor = BotocoreInstrumentor()
+                    instrumentor._patched_api_call(original_func, instance, args, kwargs)
+                    
+                    self.assertTrue("aws.auth.account.access_key" in initial_attributes)
+                    self.assertEqual(initial_attributes["aws.auth.account.access_key"], "test-access-key")
+        
+    def _test_patched_api_call_with_no_credentials(self):  
+        # Create mocks
+        original_func: MagicMock = MagicMock(return_value={"result": "success"})
+        instance: MagicMock = MagicMock()
+        span: MagicMock = MagicMock()
+        args = ("operation_name",)
+        kwargs = {}
+        initial_attributes = {}
+          
+        # Mock credentials
+        mock_credentials = MagicMock()
+        mock_credentials = None
+        instance._get_credentials.return_value = mock_credentials
+        
+        # Mock call context
+        mock_call_context = MagicMock()
+        mock_call_context.service_id = "test-service"
+        mock_call_context.operation = "test-operation"
+        mock_call_context.region = "us-west-2"
+        mock_call_context.span_name = "test-span"
+        mock_call_context.span_kind = "CLIENT"
+        
+        # Mock extension
+        mock_extension = MagicMock()
+        mock_extension.should_trace_service_call.return_value = True
+        
+        # Mock tracer with a custom start_as_current_span that captures initial attributes
+        mock_tracer = MagicMock()
+        def mock_start_span(name, kind, attributes):
+            # Capture the initial attributes
+            initial_attributes.update(attributes)
+            cm = MagicMock()
+            cm.__enter__ = MagicMock(return_value=span)
+            cm.__exit__ = MagicMock(return_value=None)
+            return cm
+        mock_tracer.start_as_current_span.side_effect = mock_start_span
+        
+        with patch('opentelemetry.instrumentation.botocore._determine_call_context', return_value=mock_call_context):
+            with patch('opentelemetry.instrumentation.botocore._find_extension', return_value=mock_extension):
+                with patch('opentelemetry.instrumentation.botocore.is_instrumentation_enabled', return_value=True):
+                    BotocoreInstrumentor._tracer = mock_tracer
+                    
+                    instrumentor = BotocoreInstrumentor()
+                    instrumentor._patched_api_call(original_func, instance, args, kwargs)
+                
+                    self.assertFalse("aws.auth.account.access_key" in initial_attributes)
+                    self.assertTrue("aws.region" in initial_attributes)
+
+    def _test_patched_api_call_with_no_access_key(self):  
+        # Create mocks
+        original_func: MagicMock = MagicMock(return_value={"result": "success"})
+        instance: MagicMock = MagicMock()
+        span: MagicMock = MagicMock()
+        args = ("operation_name",)
+        kwargs = {}
+        initial_attributes = {}
+          
+        # Mock credentials
+        mock_credentials = MagicMock()
+        mock_credentials.access_key = None
+        instance._get_credentials.return_value = mock_credentials
+        
+        # Mock call context
+        mock_call_context = MagicMock()
+        mock_call_context.service_id = "test-service"
+        mock_call_context.operation = "test-operation"
+        mock_call_context.region = "us-west-2"
+        mock_call_context.span_name = "test-span"
+        mock_call_context.span_kind = "CLIENT"
+        
+        # Mock extension
+        mock_extension = MagicMock()
+        mock_extension.should_trace_service_call.return_value = True
+        
+        # Mock tracer with a custom start_as_current_span that captures initial attributes
+        mock_tracer = MagicMock()
+        def mock_start_span(name, kind, attributes):
+            # Capture the initial attributes
+            initial_attributes.update(attributes)
+            cm = MagicMock()
+            cm.__enter__ = MagicMock(return_value=span)
+            cm.__exit__ = MagicMock(return_value=None)
+            return cm
+        mock_tracer.start_as_current_span.side_effect = mock_start_span
+        
+        with patch('opentelemetry.instrumentation.botocore._determine_call_context', return_value=mock_call_context):
+            with patch('opentelemetry.instrumentation.botocore._find_extension', return_value=mock_extension):
+                with patch('opentelemetry.instrumentation.botocore.is_instrumentation_enabled', return_value=True):
+                    BotocoreInstrumentor._tracer = mock_tracer
+                    
+                    instrumentor = BotocoreInstrumentor()
+                    instrumentor._patched_api_call(original_func, instance, args, kwargs)
+                
+                    self.assertFalse("aws.auth.account.access_key" in initial_attributes)
+                    self.assertTrue("aws.region" in initial_attributes)
 
     def _test_patched_gevent_os_ssl_instrumentation(self):
         # Only ssl and os module should have been patched since the environment variable was set to 'os, ssl'

@@ -47,7 +47,6 @@ from amazon.opentelemetry.distro._aws_span_processing_util import (
     UNKNOWN_OPERATION,
     UNKNOWN_REMOTE_OPERATION,
     UNKNOWN_REMOTE_SERVICE,
-    _is_valid_account_id,
     extract_api_path_value,
     get_egress_operation,
     get_ingress_operation,
@@ -55,6 +54,7 @@ from amazon.opentelemetry.distro._aws_span_processing_util import (
     is_db_span,
     is_key_present,
     is_local_root,
+    is_valid_account_id,
     should_generate_dependency_metric_attributes,
     should_generate_service_metric_attributes,
 )
@@ -545,7 +545,7 @@ def _set_remote_account_id_and_region(span: ReadableSpan, attributes: BoundedAtt
                 break
 
     if remote_account_id is not None and remote_region is not None:
-        if not _is_valid_account_id(remote_account_id):
+        if not is_valid_account_id(remote_account_id):
             _logger.log(DEBUG, "Invalid account id: %s", remote_account_id)
             return False
         attributes[AWS_AUTH_ACCOUNT_ID] = remote_account_id
