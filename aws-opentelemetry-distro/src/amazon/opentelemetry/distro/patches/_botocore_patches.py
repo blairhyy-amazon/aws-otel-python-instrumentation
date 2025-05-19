@@ -261,25 +261,15 @@ def _apply_botocore_api_call_patch() -> None:
             SpanAttributes.RPC_SYSTEM: "aws-api",
             SpanAttributes.RPC_SERVICE: call_context.service_id,
             SpanAttributes.RPC_METHOD: call_context.operation,
-            # TODO: update when semantic conventions exist
             "aws.region": call_context.region,
             AWS_AUTH_REGION: call_context.region,
         }
-        # import pdb;
         credentials = instance._get_credentials()
-        # pdb.set_trace()
 
         if credentials is not None:
-            # pdb.set_trace()
-
             access_key = credentials.access_key
-            # pdb.set_trace()
-
             if access_key is not None:
                 attributes[AWS_AUTH_ACCESS_KEY] = access_key
-        # pdb.set_trace()
-
-
 
         _safe_invoke(extension.extract_attributes, attributes)
 

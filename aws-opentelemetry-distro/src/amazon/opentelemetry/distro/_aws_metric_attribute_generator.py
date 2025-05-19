@@ -2,13 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 import os
 import re
-from logging import DEBUG, INFO, Logger, getLogger
+from logging import DEBUG, Logger, getLogger
 from typing import Match, Optional
 from urllib.parse import ParseResult, urlparse
 
 from amazon.opentelemetry.distro._aws_attribute_keys import (
     AWS_AUTH_ACCESS_KEY,
-    AWS_AUTH_ACCOUNT_ID,
     AWS_AUTH_REGION,
     AWS_BEDROCK_AGENT_ID,
     AWS_BEDROCK_DATA_SOURCE_ID,
@@ -27,7 +26,10 @@ from amazon.opentelemetry.distro._aws_attribute_keys import (
     AWS_REMOTE_DB_USER,
     AWS_REMOTE_ENVIRONMENT,
     AWS_REMOTE_OPERATION,
+    AWS_REMOTE_RESOURCE_ACCESS_KEY,
+    AWS_REMOTE_RESOURCE_ACCOUNT_ID,
     AWS_REMOTE_RESOURCE_IDENTIFIER,
+    AWS_REMOTE_RESOURCE_REGION,
     AWS_REMOTE_RESOURCE_TYPE,
     AWS_REMOTE_SERVICE,
     AWS_SECRETSMANAGER_SECRET_ARN,
@@ -150,10 +152,13 @@ def _generate_dependency_metric_attributes(span: ReadableSpan, resource: Resourc
     _set_service(resource, span, attributes)
     _set_egress_operation(span, attributes)
     _set_remote_service_and_operation(span, attributes)
-    _set_remote_type_and_identifier(span, attributes)
-    isAccountIdAndRegionPresent = _set_remote_account_id_and_region(span, attributes)
-    if not isAccountIdAndRegionPresent:
-        _set_remote_access_key_and_region(span, attributes)
+    # import pdb;
+    is_remote_identifier_present = _set_remote_type_and_identifier(span, attributes)
+    # pdb.set_trace()
+    if is_remote_identifier_present: 
+        is_remote_account_id_present = _set_remote_account_id_and_region(span, attributes)
+        if not is_remote_account_id_present:
+            _set_remote_access_key_and_region(span, attributes)
     _set_remote_db_user(span, attributes)
     _set_span_kind_for_dependency(span, attributes)
     return attributes
@@ -377,7 +382,7 @@ def _generate_remote_operation(span: ReadableSpan) -> str:
 
 
 # pylint: disable=too-many-branches,too-many-statements
-def _set_remote_type_and_identifier(span: ReadableSpan, attributes: BoundedAttributes) -> None:
+def _set_remote_type_and_identifier(span: ReadableSpan, attributes: BoundedAttributes) -> bool:
     """
     Remote resource attributes {@link AwsAttributeKeys#AWS_REMOTE_RESOURCE_TYPE} and {@link
     AwsAttributeKeys#AWS_REMOTE_RESOURCE_IDENTIFIER} are used to store information about the resource associated with
@@ -490,6 +495,8 @@ def _set_remote_type_and_identifier(span: ReadableSpan, attributes: BoundedAttri
     if cloudformation_primary_identifier is None:
         cloudformation_primary_identifier = remote_resource_identifier
 
+    # import pdb;
+    # pdb.set_trace()
     if (
         remote_resource_type is not None
         and remote_resource_identifier is not None
@@ -498,6 +505,8 @@ def _set_remote_type_and_identifier(span: ReadableSpan, attributes: BoundedAttri
         attributes[AWS_REMOTE_RESOURCE_TYPE] = remote_resource_type
         attributes[AWS_REMOTE_RESOURCE_IDENTIFIER] = remote_resource_identifier
         attributes[AWS_CLOUDFORMATION_PRIMARY_IDENTIFIER] = cloudformation_primary_identifier
+        return True
+    return False
 
 
 def _set_remote_account_id_and_region(span: ReadableSpan, attributes: BoundedAttributes) -> bool:
@@ -520,11 +529,9 @@ def _set_remote_account_id_and_region(span: ReadableSpan, attributes: BoundedAtt
         parsed_url = urlparse(queue_url)
         path_parts = parsed_url.path.strip("/").split("/")
         hostname = parsed_url.netloc
-
         if len(path_parts) != 3:
             _log_unknown_attribute("account_id", span)
             return False
-
         remote_account_id = path_parts[0]
 
         if hostname.startswith("sqs.") and ".amazonaws.com" in hostname:
@@ -548,17 +555,17 @@ def _set_remote_account_id_and_region(span: ReadableSpan, attributes: BoundedAtt
         if not is_valid_account_id(remote_account_id):
             _logger.log(DEBUG, "Invalid account id: %s", remote_account_id)
             return False
-        attributes[AWS_AUTH_ACCOUNT_ID] = remote_account_id
-        attributes[AWS_AUTH_REGION] = remote_region
+        attributes[AWS_REMOTE_RESOURCE_ACCOUNT_ID] = remote_account_id
+        attributes[AWS_REMOTE_RESOURCE_REGION] = remote_region
         return True
     return False
 
 
 def _set_remote_access_key_and_region(span: ReadableSpan, attributes: BoundedAttributes) -> None:
     if is_key_present(span, AWS_AUTH_ACCESS_KEY):
-        attributes[AWS_AUTH_ACCESS_KEY] = span.attributes.get(AWS_AUTH_ACCESS_KEY)
+        attributes[AWS_REMOTE_RESOURCE_ACCESS_KEY] = span.attributes.get(AWS_AUTH_ACCESS_KEY)
     if is_key_present(span, AWS_AUTH_REGION):
-        attributes[AWS_AUTH_REGION] = span.attributes.get(AWS_AUTH_REGION)
+        attributes[AWS_REMOTE_RESOURCE_REGION] = span.attributes.get(AWS_AUTH_REGION)
 
 
 def _get_db_connection(span: ReadableSpan) -> None:
