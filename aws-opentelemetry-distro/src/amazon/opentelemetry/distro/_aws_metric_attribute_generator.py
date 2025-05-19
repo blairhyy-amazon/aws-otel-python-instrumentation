@@ -152,9 +152,7 @@ def _generate_dependency_metric_attributes(span: ReadableSpan, resource: Resourc
     _set_service(resource, span, attributes)
     _set_egress_operation(span, attributes)
     _set_remote_service_and_operation(span, attributes)
-    # import pdb;
     is_remote_identifier_present = _set_remote_type_and_identifier(span, attributes)
-    # pdb.set_trace()
     if is_remote_identifier_present: 
         is_remote_account_id_present = _set_remote_account_id_and_region(span, attributes)
         if not is_remote_account_id_present:
@@ -495,8 +493,6 @@ def _set_remote_type_and_identifier(span: ReadableSpan, attributes: BoundedAttri
     if cloudformation_primary_identifier is None:
         cloudformation_primary_identifier = remote_resource_identifier
 
-    # import pdb;
-    # pdb.set_trace()
     if (
         remote_resource_type is not None
         and remote_resource_identifier is not None
