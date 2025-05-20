@@ -1232,7 +1232,10 @@ class TestAwsMetricAttributeGenerator(TestCase):
         # DynamoDB Table ARN
         self._mock_attribute(
             [SpanAttributes.AWS_DYNAMODB_TABLE_NAMES, AWS_DYNAMODB_TABLE_ARN],
-            [["aws_table_name"], self._create_mock_arn(service="dynamodb", resource_id="my-table", resource_type="table")],
+            [
+                ["aws_table_name"],
+                self._create_mock_arn(service="dynamodb", resource_id="my-table", resource_type="table"),
+            ],
             keys,
             values,
         )
@@ -1242,7 +1245,10 @@ class TestAwsMetricAttributeGenerator(TestCase):
         # Kinesis Stream ARN
         self._mock_attribute(
             [AWS_KINESIS_STREAM_NAME, AWS_KINESIS_STREAM_ARN],
-            ["test_stream_name", self._create_mock_arn(service="kinesis", resource_id="my-stream", resource_type="stream")],
+            [
+                "test_stream_name",
+                self._create_mock_arn(service="kinesis", resource_id="my-stream", resource_type="stream"),
+            ],
             keys,
             values,
         )
@@ -1292,7 +1298,10 @@ class TestAwsMetricAttributeGenerator(TestCase):
         # Bedrock Guardrail ARN
         self._mock_attribute(
             [AWS_BEDROCK_GUARDRAIL_ID, AWS_BEDROCK_GUARDRAIL_ARN],
-            ["test_guardrail_id", self._create_mock_arn(service="bedrock", resource_id="my-guardrail", resource_type="guardrail")],
+            [
+                "test_guardrail_id",
+                self._create_mock_arn(service="bedrock", resource_id="my-guardrail", resource_type="guardrail"),
+            ],
             keys,
             values,
         )
@@ -1302,7 +1311,10 @@ class TestAwsMetricAttributeGenerator(TestCase):
         # Lambda Function ARN
         self._mock_attribute(
             [AWS_LAMBDA_FUNCTION_NAME, AWS_LAMBDA_FUNCTION_ARN],
-            ["test_lambda_name", self._create_mock_arn(service="lambda", resource_id="my-function", resource_type="function")],
+            [
+                "test_lambda_name",
+                self._create_mock_arn(service="lambda", resource_id="my-function", resource_type="function"),
+            ],
             keys,
             values,
         )
@@ -1310,12 +1322,74 @@ class TestAwsMetricAttributeGenerator(TestCase):
         self._mock_attribute([AWS_LAMBDA_FUNCTION_NAME, AWS_LAMBDA_FUNCTION_ARN], [None, None])
 
         # Queue Url
+        self._mock_attribute(
+            [AWS_SQS_QUEUE_NAME, AWS_SQS_QUEUE_URL],
+            ["test_queue_name", f"https://sqs.{_MOCK_REGION}.amazonaws.com/{_MOCK_ACCOUNT_ID}/Queue"],
+            keys,
+            values,
+        )
+        self._validate_auth_account_id_and_region(expected_region=_MOCK_REGION, expected_account_id=_MOCK_ACCOUNT_ID)
+        self._mock_attribute([AWS_SQS_QUEUE_NAME, AWS_SQS_QUEUE_URL], [None, None])
 
-        # Invalid url
+        # Invalid url with no queue name
+        self._mock_attribute(
+            [AWS_SQS_QUEUE_NAME, AWS_SQS_QUEUE_URL],
+            ["test_queue_name", f"https://sqs.{_MOCK_REGION}.amazonaws.com/{_MOCK_ACCOUNT_ID}"],
+            keys,
+            values,
+        )
+        self.span_mock.kind = SpanKind.CLIENT
+        actual_attributes = _GENERATOR.generate_metric_attributes_dict_from_span(self.span_mock, self.resource).get(
+            DEPENDENCY_METRIC
+        )
+        self.assertNotIn(AWS_REMOTE_RESOURCE_ACCOUNT_ID, actual_attributes)
+        self.assertNotIn(AWS_REMOTE_RESOURCE_REGION, actual_attributes)
+        self._mock_attribute([AWS_SQS_QUEUE_NAME, AWS_SQS_QUEUE_URL], [None, None])
+
+        # Invalid url with wrong domain
+        self._mock_attribute(
+            [AWS_SQS_QUEUE_NAME, AWS_SQS_QUEUE_URL],
+            ["test_queue_name", f"https://{_MOCK_REGION}.amazonaws.com/{_MOCK_ACCOUNT_ID}/Queue"],
+            keys,
+            values,
+        )
+        self.span_mock.kind = SpanKind.CLIENT
+        actual_attributes = _GENERATOR.generate_metric_attributes_dict_from_span(self.span_mock, self.resource).get(
+            DEPENDENCY_METRIC
+        )
+        self.assertNotIn(AWS_REMOTE_RESOURCE_ACCOUNT_ID, actual_attributes)
+        self.assertNotIn(AWS_REMOTE_RESOURCE_REGION, actual_attributes)
+        self._mock_attribute([AWS_SQS_QUEUE_NAME, AWS_SQS_QUEUE_URL], [None, None])
 
         # Invalid Arn
+        self._mock_attribute(
+            [AWS_LAMBDA_FUNCTION_NAME, AWS_LAMBDA_FUNCTION_ARN],
+            ["test_lambda_name", f"arn:aws:lambda:{_MOCK_REGION}:invalidaccountid:function:test_lambda_name"],
+            keys,
+            values,
+        )
+        self.span_mock.kind = SpanKind.CLIENT
+        actual_attributes = _GENERATOR.generate_metric_attributes_dict_from_span(self.span_mock, self.resource).get(
+            DEPENDENCY_METRIC
+        )
+        self.assertNotIn(AWS_REMOTE_RESOURCE_ACCOUNT_ID, actual_attributes)
+        self.assertNotIn(AWS_REMOTE_RESOURCE_REGION, actual_attributes)
+        self._mock_attribute([AWS_SQS_QUEUE_NAME, AWS_SQS_QUEUE_URL], [None, None])
 
         # No remote identifier
+        self._mock_attribute(
+            [AWS_SQS_QUEUE_URL],
+            ["https://us-east-2.amazonaws.com/123456789012/Queue"],
+            keys,
+            values,
+        )
+        self.span_mock.kind = SpanKind.CLIENT
+        actual_attributes = _GENERATOR.generate_metric_attributes_dict_from_span(self.span_mock, self.resource).get(
+            DEPENDENCY_METRIC
+        )
+        self.assertNotIn(AWS_REMOTE_RESOURCE_ACCOUNT_ID, actual_attributes)
+        self.assertNotIn(AWS_REMOTE_RESOURCE_REGION, actual_attributes)
+        self._mock_attribute([AWS_SQS_QUEUE_URL], [None])
 
     def test_sdk_client_span_with_auth_access_key_and_region_from_sts(self):
         keys: List[str] = [
@@ -1327,7 +1401,12 @@ class TestAwsMetricAttributeGenerator(TestCase):
         self._mock_attribute(keys, values)
 
         mock_access_key = "accesskey"
-        self._mock_attribute([SpanAttributes.AWS_S3_BUCKET, AWS_AUTH_ACCESS_KEY, AWS_AUTH_REGION], ["test_s3_bucket", mock_access_key, _MOCK_REGION], keys, values)
+        self._mock_attribute(
+            [SpanAttributes.AWS_S3_BUCKET, AWS_AUTH_ACCESS_KEY, AWS_AUTH_REGION],
+            ["test_s3_bucket", mock_access_key, _MOCK_REGION],
+            keys,
+            values,
+        )
         self.span_mock.kind = SpanKind.CLIENT
         actual_attributes = _GENERATOR.generate_metric_attributes_dict_from_span(self.span_mock, self.resource).get(
             DEPENDENCY_METRIC
@@ -1335,7 +1414,9 @@ class TestAwsMetricAttributeGenerator(TestCase):
         self.assertEqual(mock_access_key, actual_attributes.get(AWS_REMOTE_RESOURCE_ACCESS_KEY))
         self.assertEqual(_MOCK_REGION, actual_attributes.get(AWS_REMOTE_RESOURCE_REGION))
         self.assertIsNone(actual_attributes.get(AWS_REMOTE_RESOURCE_ACCOUNT_ID))
-        self._mock_attribute([SpanAttributes.AWS_S3_BUCKET, AWS_AUTH_ACCESS_KEY, AWS_AUTH_REGION], [None, None, None], keys, values)
+        self._mock_attribute(
+            [SpanAttributes.AWS_S3_BUCKET, AWS_AUTH_ACCESS_KEY, AWS_AUTH_REGION], [None, None, None], keys, values
+        )
 
     def test_sdk_client_span_with_auth_account_id_and_region_from_resource_arn_and_sts(self):
         keys: List[str] = [
@@ -1353,7 +1434,7 @@ class TestAwsMetricAttributeGenerator(TestCase):
                 mock_access_key,
                 _MOCK_REGION,
                 self._create_mock_arn(service="lambda", resource_id="my-function", resource_type="function"),
-                "test_lambda_function"
+                "test_lambda_function",
             ],
             keys,
             values,
@@ -1367,9 +1448,9 @@ class TestAwsMetricAttributeGenerator(TestCase):
         self.assertIsNone(actual_attributes.get(AWS_REMOTE_RESOURCE_ACCESS_KEY))
         self._mock_attribute(
             [AWS_AUTH_ACCESS_KEY, AWS_AUTH_REGION, AWS_LAMBDA_FUNCTION_ARN, AWS_LAMBDA_FUNCTION_NAME],
-            [None, None, None, None]
+            [None, None, None, None],
         )
-        
+
     def test_client_db_span_with_remote_resource_attributes(self):
         keys: List[str] = [
             SpanAttributes.DB_SYSTEM,
@@ -1646,13 +1727,18 @@ class TestAwsMetricAttributeGenerator(TestCase):
             [None],
         )
 
-    def _validate_auth_account_id_and_region(self, expected_region: str, expected_access_key: str = None, expected_account_id: str = None, ):
+    def _validate_auth_account_id_and_region(
+        self,
+        expected_region: str,
+        expected_access_key: str = None,
+        expected_account_id: str = None,
+    ):
         for kind in [SpanKind.CLIENT, SpanKind.PRODUCER, SpanKind.CONSUMER]:
             self.span_mock.kind = kind
             actual_attributes = _GENERATOR.generate_metric_attributes_dict_from_span(self.span_mock, self.resource).get(
                 DEPENDENCY_METRIC
             )
-            if expected_account_id is not None: 
+            if expected_account_id is not None:
                 self.assertEqual(expected_account_id, actual_attributes.get(AWS_REMOTE_RESOURCE_ACCOUNT_ID))
             if expected_access_key is not None:
                 self.assertEqual(expected_access_key, actual_attributes.get(AWS_REMOTE_RESOURCE_ACCESS_KEY))

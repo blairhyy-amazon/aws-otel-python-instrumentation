@@ -153,7 +153,7 @@ def _generate_dependency_metric_attributes(span: ReadableSpan, resource: Resourc
     _set_egress_operation(span, attributes)
     _set_remote_service_and_operation(span, attributes)
     is_remote_identifier_present = _set_remote_type_and_identifier(span, attributes)
-    if is_remote_identifier_present: 
+    if is_remote_identifier_present:
         is_remote_account_id_present = _set_remote_account_id_and_region(span, attributes)
         if not is_remote_account_id_present:
             _set_remote_access_key_and_region(span, attributes)
@@ -525,7 +525,7 @@ def _set_remote_account_id_and_region(span: ReadableSpan, attributes: BoundedAtt
         parsed_url = urlparse(queue_url)
         path_parts = parsed_url.path.strip("/").split("/")
         hostname = parsed_url.netloc
-        if len(path_parts) != 3:
+        if len(path_parts) != 2:
             _log_unknown_attribute("account_id", span)
             return False
         remote_account_id = path_parts[0]
