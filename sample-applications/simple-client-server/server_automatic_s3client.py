@@ -37,7 +37,44 @@ def get_kinesis_stream(stream_arn):
         print(f"Error getting stream: {str(e)}")
         return None
 
+@app.route("/get_s3_bucket")
+def get_s3_bucket():
+    # Create an STS client to assume role
+    sts_client = boto3.client("sts")
 
+    role_arn = ""
+    # Assume the specified role
+    assumed_role = sts_client.assume_role(
+        RoleArn=role_arn, 
+        RoleSessionName="CrossAccountAccess"
+    )
+
+    # Get temporary credentials from assumed role
+    credentials = assumed_role["Credentials"]
+
+    # Create S3 client with the assumed role credentials
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=credentials["AccessKeyId"],
+        aws_secret_access_key=credentials["SecretAccessKey"],
+        aws_session_token=credentials["SessionToken"],
+    )
+
+    bucket_name = "cross-account-test-blairhyy"
+
+    try:
+        # Get bucket information
+        s3.head_bucket(Bucket=bucket_name)
+        
+        return {
+            "bucket_exists": True,
+            "bucket_name": bucket_name,
+        }
+    except s3.exceptions.NoSuchBucket:
+        return {"error": f"Bucket {bucket_name} not found"}
+    except Exception as e:
+        return {"error": f"Error accessing bucket: {str(e)}"}
+    
 @app.route("/get_table")
 def get_dynamodb_table(role_arn):
     # Create an STS client to assume role
