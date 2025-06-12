@@ -402,16 +402,16 @@ def _set_remote_type_and_identifier(span: ReadableSpan, attributes: BoundedAttri
             remote_resource_identifier = _escape_delimiters(span.attributes.get(_AWS_TABLE_NAMES)[0])
         elif is_key_present(span, AWS_DYNAMODB_TABLE_ARN):
             remote_resource_type = _NORMALIZED_DYNAMO_DB_SERVICE_NAME + "::Table"
-            remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_DYNAMODB_TABLE_ARN)).replace(
-                "table/", ""
+            remote_resource_identifier = (
+                _escape_delimiters(span.attributes.get(AWS_DYNAMODB_TABLE_ARN)).split(":")[-1].replace("table/", "")
             )
         elif is_key_present(span, AWS_KINESIS_STREAM_NAME):
             remote_resource_type = _NORMALIZED_KINESIS_SERVICE_NAME + "::Stream"
             remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_KINESIS_STREAM_NAME))
         elif is_key_present(span, AWS_KINESIS_STREAM_ARN):
             remote_resource_type = _NORMALIZED_KINESIS_SERVICE_NAME + "::Stream"
-            remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_KINESIS_STREAM_ARN)).replace(
-                "stream/", ""
+            remote_resource_identifier = (
+                _escape_delimiters(span.attributes.get(AWS_KINESIS_STREAM_ARN)).split(":")[-1].replace("stream/", "")
             )
         elif is_key_present(span, _AWS_BUCKET_NAME):
             remote_resource_type = _NORMALIZED_S3_SERVICE_NAME + "::Bucket"

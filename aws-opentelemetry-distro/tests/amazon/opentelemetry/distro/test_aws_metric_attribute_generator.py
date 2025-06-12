@@ -1030,6 +1030,19 @@ class TestAwsMetricAttributeGenerator(TestCase):
         )
         self._mock_attribute([AWS_SQS_QUEUE_URL, AWS_SQS_QUEUE_NAME], [None, None])
 
+        # Validate behaviour of AWS_KINESIS_STREAM_ARN attribute, then remove it.
+        self._mock_attribute(
+            [AWS_KINESIS_STREAM_ARN], ["arn:aws:kinesis:us-west-2:123456789012:stream/aws_stream_name"], keys, values
+        )
+        self._validate_remote_resource_attributes(
+            "AWS::Kinesis::Stream",
+            "aws_stream_name",
+            "us-west-2",
+            "123456789012",
+            None,
+        )
+        self._mock_attribute([AWS_KINESIS_STREAM_ARN], [None])
+
         # Validate behaviour of AWS_KINESIS_STREAM_NAME attribute, then remove it.
         self._mock_attribute([AWS_KINESIS_STREAM_NAME], ["aws_stream_name"], keys, values)
         self._validate_remote_resource_attributes(
@@ -1040,6 +1053,15 @@ class TestAwsMetricAttributeGenerator(TestCase):
             _AWS_REMOTE_RESOURCE_ACCESS_KEY,
         )
         self._mock_attribute([AWS_KINESIS_STREAM_NAME], [None])
+
+        # Validate behaviour of AWS_DYNAMODB_TABLE_ARN attribute, then remove it.
+        self._mock_attribute(
+            [AWS_DYNAMODB_TABLE_ARN], ["arn:aws:dynamodb:us-west-2:123456789012:table/aws_table_name"], keys, values
+        )
+        self._validate_remote_resource_attributes(
+            "AWS::DynamoDB::Table", "aws_table_name", "us-west-2", "123456789012", None
+        )
+        self._mock_attribute([AWS_DYNAMODB_TABLE_ARN], [None])
 
         # Validate behaviour of SpanAttributes.AWS_DYNAMODB_TABLE_NAMES attribute with one table name, then remove it.
         self._mock_attribute([SpanAttributes.AWS_DYNAMODB_TABLE_NAMES], [["aws_table_name"]], keys, values)
