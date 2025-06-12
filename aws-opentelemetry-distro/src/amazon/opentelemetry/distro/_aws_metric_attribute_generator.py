@@ -56,7 +56,6 @@ from amazon.opentelemetry.distro._aws_span_processing_util import (
     is_db_span,
     is_key_present,
     is_local_root,
-    is_valid_account_id,
     should_generate_dependency_metric_attributes,
     should_generate_service_metric_attributes,
 )
@@ -65,6 +64,7 @@ from amazon.opentelemetry.distro.metric_attribute_generator import (
     SERVICE_METRIC,
     MetricAttributeGenerator,
 )
+from amazon.opentelemetry.distro.regional_resource_arn_parser import RegionalResourceArnParser
 from amazon.opentelemetry.distro.sqs_url_parser import SqsUrlParser
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import BoundedAttributes, ReadableSpan
@@ -400,9 +400,19 @@ def _set_remote_type_and_identifier(span: ReadableSpan, attributes: BoundedAttri
         if is_key_present(span, _AWS_TABLE_NAMES) and len(span.attributes.get(_AWS_TABLE_NAMES)) == 1:
             remote_resource_type = _NORMALIZED_DYNAMO_DB_SERVICE_NAME + "::Table"
             remote_resource_identifier = _escape_delimiters(span.attributes.get(_AWS_TABLE_NAMES)[0])
+        elif is_key_present(span, AWS_DYNAMODB_TABLE_ARN):
+            remote_resource_type = _NORMALIZED_DYNAMO_DB_SERVICE_NAME + "::Table"
+            remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_DYNAMODB_TABLE_ARN)).replace(
+                "table/", ""
+            )
         elif is_key_present(span, AWS_KINESIS_STREAM_NAME):
             remote_resource_type = _NORMALIZED_KINESIS_SERVICE_NAME + "::Stream"
             remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_KINESIS_STREAM_NAME))
+        elif is_key_present(span, AWS_KINESIS_STREAM_ARN):
+            remote_resource_type = _NORMALIZED_KINESIS_SERVICE_NAME + "::Stream"
+            remote_resource_identifier = _escape_delimiters(span.attributes.get(AWS_KINESIS_STREAM_ARN)).replace(
+                "stream/", ""
+            )
         elif is_key_present(span, _AWS_BUCKET_NAME):
             remote_resource_type = _NORMALIZED_S3_SERVICE_NAME + "::Bucket"
             remote_resource_identifier = _escape_delimiters(span.attributes.get(_AWS_BUCKET_NAME))
@@ -510,7 +520,6 @@ def _set_remote_account_id_and_region(span: ReadableSpan, attributes: BoundedAtt
         AWS_DYNAMODB_TABLE_ARN,
         AWS_KINESIS_STREAM_ARN,
         AWS_SNS_TOPIC_ARN,
-        AWS_SNS_TOPIC_ARN,
         AWS_SECRETSMANAGER_SECRET_ARN,
         AWS_STEPFUNCTIONS_STATEMACHINE_ARN,
         AWS_STEPFUNCTIONS_ACTIVITY_ARN,
@@ -521,36 +530,18 @@ def _set_remote_account_id_and_region(span: ReadableSpan, attributes: BoundedAtt
     remote_region: Optional[str] = None
 
     if is_key_present(span, AWS_SQS_QUEUE_URL):
-        queue_url = span.attributes.get(AWS_SQS_QUEUE_URL)
-        parsed_url = urlparse(queue_url)
-        path_parts = parsed_url.path.strip("/").split("/")
-        hostname = parsed_url.netloc
-        if len(path_parts) != 2:
-            _log_unknown_attribute("account_id", span)
-            return False
-        remote_account_id = path_parts[0]
-
-        if hostname.startswith("sqs.") and ".amazonaws.com" in hostname:
-            remote_region = hostname.replace("sqs.", "").split(".amazonaws.com")[0]
-        else:
-            _log_unknown_attribute("region", span)
-            return False
+        queue_url = _escape_delimiters(span.attributes.get(AWS_SQS_QUEUE_URL))
+        remote_account_id = SqsUrlParser.get_account_id(queue_url)
+        remote_region = SqsUrlParser.get_region(queue_url)
     else:
         for arn_attribute in ARN_ATTRIBUTES:
             if is_key_present(span, arn_attribute):
                 arn = span.attributes.get(arn_attribute)
-                arn_parts = arn.split(":")
-                if len(arn_parts) != 6:
-                    _log_unknown_attribute("account_id and region", span)
-                    continue
-                remote_account_id = arn_parts[4]
-                remote_region = arn_parts[3]
+                remote_account_id = RegionalResourceArnParser.get_account_id(arn)
+                remote_region = RegionalResourceArnParser.get_region(arn)
                 break
 
     if remote_account_id is not None and remote_region is not None:
-        if not is_valid_account_id(remote_account_id):
-            _logger.log(DEBUG, "Invalid account id: %s", remote_account_id)
-            return False
         attributes[AWS_REMOTE_RESOURCE_ACCOUNT_ID] = remote_account_id
         attributes[AWS_REMOTE_RESOURCE_REGION] = remote_region
         return True
