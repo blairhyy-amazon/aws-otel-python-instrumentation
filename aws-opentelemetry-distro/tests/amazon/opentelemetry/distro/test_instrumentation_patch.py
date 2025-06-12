@@ -39,7 +39,7 @@ _STATE_MACHINE_ARN: str = "arn:aws:states:us-west-2:000000000000:stateMachine:te
 _ACTIVITY_ARN: str = "arn:aws:states:us-east-1:007003123456789012:activity:testActivity"
 _LAMBDA_FUNCTION_NAME: str = "lambdaFunctionName"
 _LAMBDA_SOURCE_MAPPING_ID: str = "lambdaEventSourceMappingID"
-_AUTH_ACCESS_KEY: str = "test-access-key"
+_TABLE_ARN: str = "arn:aws:dynamodb:us-west-2:123456789012:table/testTable"
 
 # Patch names
 GET_DISTRIBUTION_PATCH: str = "amazon.opentelemetry.distro._utils.pkg_resources.get_distribution"
@@ -341,6 +341,12 @@ class TestInstrumentationPatch(TestCase):
         self.assertEqual(lambda_attributes["aws.lambda.function.name"], _LAMBDA_FUNCTION_NAME)
         self.assertTrue("aws.lambda.resource_mapping.id" in lambda_attributes)
         self.assertEqual(lambda_attributes["aws.lambda.resource_mapping.id"], _LAMBDA_SOURCE_MAPPING_ID)
+
+        # DynamoDB
+        self.assertTrue("dynamodb" in _KNOWN_EXTENSIONS)
+        dynamodb_success_attributes: Dict[str, str] = _do_on_success_dynamodb()
+        self.assertTrue("aws.dynamodb.table.arn" in dynamodb_success_attributes)
+        self.assertEqual(dynamodb_success_attributes["aws.dynamodb.table.arn"], _TABLE_ARN)
 
         # Access key
         self._test_patched_api_call_with_credentials()
@@ -835,6 +841,12 @@ def _do_extract_attributes(service_name: str, params: Dict[str, Any], operation:
     sqs_extension = _KNOWN_EXTENSIONS[service_name]()(mock_call_context)
     sqs_extension.extract_attributes(attributes)
     return attributes
+
+
+def _do_on_success_dynamodb() -> Dict[str, str]:
+    service_name: str = "dynamodb"
+    result: Dict[str, Any] = {"Table": {"TableArn": _TABLE_ARN}}
+    return _do_on_success(service_name, result)
 
 
 def _do_on_success(

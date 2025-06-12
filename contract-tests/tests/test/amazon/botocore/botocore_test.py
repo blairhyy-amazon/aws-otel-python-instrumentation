@@ -56,6 +56,7 @@ _AWS_SNS_TOPIC_ARN: str = "aws.sns.topic.arn"
 _AWS_DYNAMODB_TABLE_ARN: str = "aws.dynamodb.table.arn"
 _AWS_KINESIS_STREAM_ARN: str = "aws.kinesis.stream.arn"
 
+
 # pylint: disable=too-many-public-methods,too-many-lines
 class BotocoreTest(ContractTestBase):
     _local_stack: LocalStackContainer
@@ -1035,16 +1036,16 @@ class BotocoreTest(ContractTestBase):
                     attributes_dict, AWS_CLOUDFORMATION_PRIMARY_IDENTIFIER, cloudformation_primary_identifier
                 )
         if remote_resource_account_id != "None":
-            assert remote_resource_identifier != "None"        
+            assert remote_resource_identifier != "None"
             self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_ACCOUNT_ID, remote_resource_account_id)
             self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_REGION, remote_resource_region)
             self.assertIsNone(attributes_dict.get(AWS_REMOTE_RESOURCE_ACCESS_KEY))
         if remote_resource_access_key != "None":
-            assert remote_resource_identifier != "None"        
+            assert remote_resource_identifier != "None"
             self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_ACCESS_KEY, remote_resource_access_key)
             self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_REGION, remote_resource_region)
             self.assertIsNone(attributes_dict.get(AWS_REMOTE_RESOURCE_ACCOUNT_ID))
-        
+
         # See comment above AWS_LOCAL_OPERATION
         self._assert_str_attribute(attributes_dict, AWS_SPAN_KIND, span_kind)
 
@@ -1145,12 +1146,12 @@ class BotocoreTest(ContractTestBase):
             else:
                 self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_IDENTIFIER, remote_resource_identifier)
         if remote_resource_account_id != "None":
-            assert remote_resource_identifier != "None"        
+            assert remote_resource_identifier != "None"
             self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_ACCOUNT_ID, remote_resource_account_id)
             self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_REGION, remote_resource_region)
             self.assertIsNone(attribute_dict.get(AWS_REMOTE_RESOURCE_ACCESS_KEY))
         if remote_resource_access_key != "None":
-            assert remote_resource_identifier != "None"        
+            assert remote_resource_identifier != "None"
             self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_ACCESS_KEY, remote_resource_access_key)
             self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_REGION, remote_resource_region)
             self.assertIsNone(attribute_dict.get(AWS_REMOTE_RESOURCE_ACCOUNT_ID))

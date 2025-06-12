@@ -89,20 +89,20 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def _handle_cross_account_request(self) -> None:
         s3_client = boto3.client(
-            's3',
+            "s3",
             endpoint_url=_AWS_SDK_S3_ENDPOINT,
             region_name="eu-central-1",
             aws_access_key_id="account_b_access_key_id",
             aws_secret_access_key="account_b_secret_access_key",
-            aws_session_token="account_b_token"
+            aws_session_token="account_b_token",
         )
-        
         if self.in_path("createbucket/account_b"):
             set_main_status(200)
             s3_client.create_bucket(
-                Bucket="cross-account-bucket",
-                CreateBucketConfiguration={"LocationConstraint": "eu-central-1"}
+                Bucket="cross-account-bucket", CreateBucketConfiguration={"LocationConstraint": "eu-central-1"}
             )
+        else:
+            set_main_status(404)
 
     def _handle_s3_request(self) -> None:
         s3_client: BaseClient = boto3.client("s3", endpoint_url=_AWS_SDK_S3_ENDPOINT, region_name=_AWS_REGION)
@@ -172,13 +172,6 @@ class RequestHandler(BaseHTTPRequestHandler):
             )
         elif self.in_path("describetable/some-table"):
             set_main_status(200)
-            # ddb_client.meta.events.register(
-            #     "before-call.dynamodb.DescribeTable",
-            #     lambda **kwargs: inject_200_success(
-            #         TableARN="arn:aws:dynamodb:us-west-2:000000000000:table/put_test_table",
-            #         **kwargs,
-            #     ),
-            # )            
             ddb_client.describe_table(
                 TableName="put_test_table",
             )
@@ -254,7 +247,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                     **kwargs,
                 ),
             )
-            kinesis_client.describe_stream(StreamName="test_stream", StreamARN="arn:aws:kinesis:us-west-2:000000000000:stream/test_stream")
+            kinesis_client.describe_stream(
+                StreamName="test_stream", StreamARN="arn:aws:kinesis:us-west-2:000000000000:stream/test_stream"
+            )
         else:
             set_main_status(404)
 
