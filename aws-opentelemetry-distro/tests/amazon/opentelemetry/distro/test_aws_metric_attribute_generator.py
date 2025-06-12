@@ -1739,14 +1739,3 @@ class TestAwsMetricAttributeGenerator(TestCase):
                 self.assertIsNone(dependency_attributes)
                 self.assertEqual(len(service_attributes), len(BoundedAttributes(attributes=expected_attributes)))
                 self.assertEqual(service_attributes, BoundedAttributes(attributes=expected_attributes))
-
-    def _create_mock_arn(
-        self,
-        service: str,
-        resource_type: str,
-        resource_id: str = "default",
-        region: str = _MOCK_REGION,
-        account_id: str = _MOCK_ACCOUNT_ID,
-    ) -> str:
-        resource = f"{resource_type}/{resource_id}"
-        return f"arn:aws:{service}:{region}:{account_id}:{resource}"

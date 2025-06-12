@@ -239,14 +239,6 @@ class RequestHandler(BaseHTTPRequestHandler):
             kinesis_client.put_record(StreamName="test_stream", Data=b"test", PartitionKey="partition_key")
         elif self.in_path("describestream/my-stream"):
             set_main_status(200)
-            kinesis_client.meta.events.register(
-                "before-call.kinesis.DescribeStream",
-                lambda **kwargs: inject_200_success(
-                    StreamName="test_stream",
-                    StreamARN="arn:aws:kinesis:us-west-2:000000000000:stream/test_stream",
-                    **kwargs,
-                ),
-            )
             kinesis_client.describe_stream(
                 StreamName="test_stream", StreamARN="arn:aws:kinesis:us-west-2:000000000000:stream/test_stream"
             )

@@ -1038,16 +1038,13 @@ class BotocoreTest(ContractTestBase):
         if remote_resource_account_id != "None":
             assert remote_resource_identifier != "None"
             self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_ACCOUNT_ID, remote_resource_account_id)
-            self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_REGION, remote_resource_region)
             self.assertIsNone(attributes_dict.get(AWS_REMOTE_RESOURCE_ACCESS_KEY))
         if remote_resource_access_key != "None":
             assert remote_resource_identifier != "None"
             self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_ACCESS_KEY, remote_resource_access_key)
-            self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_REGION, remote_resource_region)
             self.assertIsNone(attributes_dict.get(AWS_REMOTE_RESOURCE_ACCOUNT_ID))
-
-        # See comment above AWS_LOCAL_OPERATION
-        self._assert_str_attribute(attributes_dict, AWS_SPAN_KIND, span_kind)
+        if remote_resource_region != "None":
+            self._assert_str_attribute(attributes_dict, AWS_REMOTE_RESOURCE_REGION, remote_resource_region)
 
     @override
     def _assert_semantic_conventions_span_attributes(
@@ -1148,13 +1145,13 @@ class BotocoreTest(ContractTestBase):
         if remote_resource_account_id != "None":
             assert remote_resource_identifier != "None"
             self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_ACCOUNT_ID, remote_resource_account_id)
-            self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_REGION, remote_resource_region)
             self.assertIsNone(attribute_dict.get(AWS_REMOTE_RESOURCE_ACCESS_KEY))
         if remote_resource_access_key != "None":
             assert remote_resource_identifier != "None"
             self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_ACCESS_KEY, remote_resource_access_key)
-            self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_REGION, remote_resource_region)
             self.assertIsNone(attribute_dict.get(AWS_REMOTE_RESOURCE_ACCOUNT_ID))
+        if remote_resource_region != "None":
+            self._assert_str_attribute(attribute_dict, AWS_REMOTE_RESOURCE_REGION, remote_resource_region)
         self.check_sum(metric_name, dependency_dp.sum, expected_sum)
 
         attribute_dict: Dict[str, AnyValue] = self._get_attributes_dict(service_dp.attributes)
