@@ -1306,35 +1306,48 @@ class TestAwsMetricAttributeGenerator(TestCase):
             keys,
             values,
         )
-        self._validate_remote_resource_attributes("AWS::Lambda::Function", "testLambdaFunction")
+        self._validate_remote_resource_attributes(
+            "AWS::Lambda::Function", "testLambdaFunction", "us-east-1", "123456789012", None
+        )
         self._mock_attribute(
             [AWS_LAMBDA_FUNCTION_NAME, AWS_LAMBDA_FUNCTION_ARN, SpanAttributes.RPC_METHOD], [None, None, None]
         )
 
         # Cross account support
         # Invalid arn but account access key is available
-        self._mock_attribute([AWS_STEPFUNCTIONS_STATEMACHINE_ARN], ["invalid_arn"])
+        self._mock_attribute(
+            [AWS_STEPFUNCTIONS_STATEMACHINE_ARN],
+            ["invalid_arn"],
+            keys,
+            values,
+        )
         self._validate_remote_resource_attributes(
-            None, None, _AWS_REMOTE_RESOURCE_REGION, None, _AWS_REMOTE_RESOURCE_ACCESS_KEY
+            "AWS::StepFunctions::StateMachine",
+            "invalid_arn",
+            _AWS_REMOTE_RESOURCE_REGION,
+            None,
+            _AWS_REMOTE_RESOURCE_ACCESS_KEY,
         )
         self._mock_attribute([AWS_STEPFUNCTIONS_STATEMACHINE_ARN], [None])
 
         # Invalid arn and no account access key
-        self._mock_attribute([AWS_AUTH_ACCESS_KEY], [None])
-        self._mock_attribute([AWS_AUTH_REGION], [None])
-        self._mock_attribute([AWS_STEPFUNCTIONS_STATEMACHINE_ARN], ["invalid_arn"])
-        self._validate_remote_resource_attributes(None, None)
+        self._mock_attribute(
+            [AWS_STEPFUNCTIONS_STATEMACHINE_ARN, SpanAttributes.RPC_SYSTEM], ["invalid_arn", "aws-api"]
+        )
+        self._validate_remote_resource_attributes("AWS::StepFunctions::StateMachine", "invalid_arn")
         self._mock_attribute([AWS_STEPFUNCTIONS_STATEMACHINE_ARN], [None])
 
         # Both account access key and account id are not available
-        self._mock_attribute([SpanAttributes.AWS_S3_BUCKET], ["aws_s3_bucket_name"])
+        self._mock_attribute(
+            [SpanAttributes.AWS_S3_BUCKET, SpanAttributes.RPC_SYSTEM], ["aws_s3_bucket_name", "aws-api"]
+        )
         self._validate_remote_resource_attributes("AWS::S3::Bucket", "aws_s3_bucket_name")
         self._mock_attribute([SpanAttributes.AWS_S3_BUCKET], [None])
 
         # Account access key is not available
         self._mock_attribute(
-            [AWS_STEPFUNCTIONS_STATEMACHINE_ARN],
-            ["arn:aws:states:us-east-1:123456789123:stateMachine:testStateMachine"],
+            [AWS_STEPFUNCTIONS_STATEMACHINE_ARN, SpanAttributes.RPC_SYSTEM],
+            ["arn:aws:states:us-east-1:123456789123:stateMachine:testStateMachine", "aws-api"],
         )
         self._validate_remote_resource_attributes(
             "AWS::StepFunctions::StateMachine", "testStateMachine", "us-east-1", "123456789123", None
@@ -1343,16 +1356,16 @@ class TestAwsMetricAttributeGenerator(TestCase):
 
         # Arn with invalid account id
         self._mock_attribute(
-            [AWS_STEPFUNCTIONS_STATEMACHINE_ARN],
-            ["arn:aws:states:us-east-1:invalid_account_id:stateMachine:testStateMachine"],
+            [AWS_STEPFUNCTIONS_STATEMACHINE_ARN, SpanAttributes.RPC_SYSTEM],
+            ["arn:aws:states:us-east-1:invalid_account_id:stateMachine:testStateMachine", "aws-api"],
         )
         self._validate_remote_resource_attributes("AWS::StepFunctions::StateMachine", "testStateMachine")
         self._mock_attribute([AWS_STEPFUNCTIONS_STATEMACHINE_ARN], [None])
 
         # Arn with invalid region
         self._mock_attribute(
-            [AWS_STEPFUNCTIONS_STATEMACHINE_ARN],
-            ["arn:aws:states:invalid_region:123456789123:stateMachine:testStateMachine"],
+            [AWS_STEPFUNCTIONS_STATEMACHINE_ARN, SpanAttributes.RPC_SYSTEM],
+            ["arn:aws:states:invalid_region:123456789123:stateMachine:testStateMachine", "aws-api"],
         )
         self._validate_remote_resource_attributes(
             "AWS::StepFunctions::StateMachine", "testStateMachine", "invalid_region", "123456789123", None
