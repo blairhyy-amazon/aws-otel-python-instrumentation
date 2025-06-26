@@ -29,3 +29,15 @@ def is_installed(req: str) -> bool:
 def is_agent_observability_enabled() -> bool:
     """Is the Agentic AI monitoring flag set to true?"""
     return os.environ.get(AGENT_OBSERVABILITY_ENABLED, "false").lower() == "true"
+
+
+def is_account_id(input_str: str) -> bool:
+    if input_str is None:
+        return False
+
+    try:
+        int(input_str)
+    except ValueError:
+        return False
+
+    return True
