@@ -6,12 +6,9 @@ import os
 from io import BytesIO
 from typing import Any, Dict
 from unittest import TestCase
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import gevent.monkey
-import pkg_resources
-from botocore.client import BaseClient
-from botocore.response import StreamingBody
 
 from amazon.opentelemetry.distro.patches._instrumentation_patch import (
     AWS_GEVENT_PATCH_MODULES,
@@ -355,7 +352,7 @@ class TestInstrumentationPatch(TestCase):
 
     def _test_patched_api_call_with_credentials(self):
         # Create mocks
-        original_func: MagicMock = MagicMock(return_value={"result": "success"})
+        original_func: MagicMock = MagicMock(return_value={"ResponseMetadata": {"RequestId": "12345"}})
         instance: MagicMock = MagicMock()
         span: MagicMock = MagicMock()
         args = ("operation_name",)
@@ -369,6 +366,7 @@ class TestInstrumentationPatch(TestCase):
 
         # Mock call context
         mock_call_context = MagicMock()
+        mock_call_context.service = "test-service"
         mock_call_context.service_id = "test-service"
         mock_call_context.operation = "test-operation"
         mock_call_context.region = "us-west-2"
@@ -379,12 +377,21 @@ class TestInstrumentationPatch(TestCase):
         # Mock extension
         mock_extension = MagicMock()
         mock_extension.should_trace_service_call.return_value = True
+        mock_extension.tracer_schema_version.return_value = "1.0.0"
+        mock_extension.event_logger_schema_version.return_value = "1.0.0"
+        mock_extension.meter_schema_version.return_value = "1.0.0"
+        mock_extension.should_end_span_on_exit.return_value = True
+        mock_extension.extract_attributes = lambda x: None
+        mock_extension.before_service_call = lambda *args, **kwargs: None
+        mock_extension.after_service_call = lambda *args, **kwargs: None
+        mock_extension.on_success = lambda *args, **kwargs: None
+        mock_extension.on_error = lambda *args, **kwargs: None
+        mock_extension.setup_metrics = lambda meter, metrics: None
 
-        # Mock tracer with a custom start_as_current_span that captures initial attributes
+        # Mock tracer with start_as_current_span
         mock_tracer = MagicMock()
 
-        def mock_start_span(name, kind, attributes):
-            # Capture the initial attributes
+        def mock_start_span(name, kind, attributes, end_on_exit):
             initial_attributes.update(attributes)
             cm = MagicMock()
             cm.__enter__ = MagicMock(return_value=span)
@@ -393,17 +400,20 @@ class TestInstrumentationPatch(TestCase):
 
         mock_tracer.start_as_current_span.side_effect = mock_start_span
 
-        with patch("opentelemetry.instrumentation.botocore._determine_call_context", return_value=mock_call_context):
-            with patch("opentelemetry.instrumentation.botocore._find_extension", return_value=mock_extension):
-                with patch("opentelemetry.instrumentation.botocore.is_instrumentation_enabled", return_value=True):
-                    with patch("amazon.opentelemetry.distro.patches._botocore_patches.get_server_attributes", return_value={}):
-                        BotocoreInstrumentor._tracer = mock_tracer
+        with patch("opentelemetry.instrumentation.botocore._determine_call_context", return_value=mock_call_context), \
+            patch("opentelemetry.instrumentation.botocore._find_extension", return_value=mock_extension), \
+            patch("opentelemetry.instrumentation.botocore.is_instrumentation_enabled", return_value=True), \
+            patch("amazon.opentelemetry.distro.patches._botocore_patches.get_server_attributes", return_value={}), \
+            patch("amazon.opentelemetry.distro.patches._botocore_patches.get_tracer", return_value=mock_tracer), \
+            patch("amazon.opentelemetry.distro.patches._botocore_patches.get_event_logger", return_value=MagicMock()), \
+            patch("amazon.opentelemetry.distro.patches._botocore_patches.get_meter", return_value=MagicMock()):
 
-                        instrumentor = BotocoreInstrumentor()
-                        instrumentor._patched_api_call(original_func, instance, args, kwargs)
+            instrumentor = BotocoreInstrumentor()
+            instrumentor.instrument()
+            instrumentor._patched_api_call(original_func, instance, args, kwargs)
 
-                        self.assertTrue("aws.auth.account.access_key" in initial_attributes)
-                        self.assertEqual(initial_attributes["aws.auth.account.access_key"], "test-access-key")
+            self.assertIn("aws.auth.account.access_key", initial_attributes)
+            self.assertEqual(initial_attributes["aws.auth.account.access_key"], "test-access-key")
 
     def _test_patched_api_call_with_no_credentials(self):
         # Create mocks
@@ -426,7 +436,7 @@ class TestInstrumentationPatch(TestCase):
         mock_call_context.region = "us-west-2"
         mock_call_context.span_name = "test-span"
         mock_call_context.span_kind = "CLIENT"
-        type(mock_call_context).endpoint_url = PropertyMock(return_value="http://test.com")
+        mock_call_context.endpoint_url = "http://test.com"
 
         # Mock extension
         mock_extension = MagicMock()
@@ -478,7 +488,7 @@ class TestInstrumentationPatch(TestCase):
         mock_call_context.region = "us-west-2"
         mock_call_context.span_name = "test-span"
         mock_call_context.span_kind = "CLIENT"
-        type(mock_call_context).endpoint_url = PropertyMock(return_value="http://test.com")
+        mock_call_context.endpoint_url = "http://test.com"
 
         # Mock extension
         mock_extension = MagicMock()
@@ -501,8 +511,6 @@ class TestInstrumentationPatch(TestCase):
             with patch("opentelemetry.instrumentation.botocore._find_extension", return_value=mock_extension):
                 with patch("opentelemetry.instrumentation.botocore.is_instrumentation_enabled", return_value=True):
                     with patch("opentelemetry.instrumentation.botocore.get_server_attributes", return_value={}):
-                        BotocoreInstrumentor._tracer = mock_tracer
-
                         instrumentor = BotocoreInstrumentor()
                         instrumentor._patched_api_call(original_func, instance, args, kwargs)
 
